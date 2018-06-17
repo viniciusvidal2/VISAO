@@ -1,0 +1,4 @@
+<launch>
+    <node name="match_images_node" pkg="match_images" type="match_images_node" output="screen">
+    </node>
+</launch>

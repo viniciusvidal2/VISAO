@@ -1,0 +1,4 @@
+register/ptclouds/*.ply
+register/transformador_clouds/*.ply
+register/laboratorio_clouds/*.ply
+*.autosave
