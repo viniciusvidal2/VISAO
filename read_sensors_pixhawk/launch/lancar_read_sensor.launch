@@ -1,0 +1,10 @@
+<launch>
+
+<!--Sempre lancar o no PX4 junto-->
+<include file="$(find mavros)/launch/px4.launch">
+</include>
+
+<node name="read_sensors_pixhawk_node" pkg="read_sensors_pixhawk" type="read_sensors_pixhawk_node" output="screen">
+</node>
+
+</launch>
