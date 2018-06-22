@@ -1,10 +1,17 @@
 <launch>
 
+<arg name="rviz" default="true"/>
+
 <!--Sempre lancar o no PX4 junto-->
 <include file="$(find mavros)/launch/px4.launch">
 </include>
 
-<node name="read_sensors_pixhawk_node" pkg="read_sensors_pixhawk" type="read_sensors_pixhawk_node" output="screen">
+<node name="read_sensors_pixhawk_node" pkg="read_sensors_pixhawk" type="read_node" output="screen">
 </node>
+
+<group if="$(arg rviz)">
+    <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-f local_origin_ned -d $(find read_sensors_pixhawk)/resources/visual.rviz">
+    </node>
+</group>
 
 </launch>
