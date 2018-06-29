@@ -12,6 +12,7 @@
 #include <mavros_msgs/StreamRate.h>
 #include <nav_msgs/Odometry.h>
 #include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/CommandBool.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -46,16 +47,16 @@ geometry_msgs::Point p;
 void escutar_pose(const nav_msgs::OdometryConstPtr& msg, const geometry_msgs::PoseStampedConstPtr& msg2)
 {
   // Leitura da posicao e orientacao
-  ROS_INFO("Norte: %.2f\tLeste: %.2f\tUp: %.2f", msg->twist.twist.linear.x
-                                               , msg->twist.twist.linear.y
-                                               , msg->twist.twist.linear.z);
+  ROS_INFO("Norte: %.2f\tLeste: %.2f\tUp: %.2f", 100*msg->twist.twist.linear.x
+                                               , 100*msg->twist.twist.linear.y
+                                               , 100*msg->twist.twist.linear.z);
   x.push_back(msg->twist.twist.linear.x);
   y.push_back(msg->twist.twist.linear.y);
   z.push_back(msg->twist.twist.linear.z);
-  ROS_INFO("X: %.3f\tY: %.3f\tZ: %.3f\t W:%.3f", msg2->pose.orientation.x
-                                               , msg2->pose.orientation.y
-                                               , msg2->pose.orientation.z
-                                               , msg2->pose.orientation.w);
+//  ROS_INFO("X: %.3f\tY: %.3f\tZ: %.3f\t W:%.3f", msg2->pose.orientation.x
+//                                               , msg2->pose.orientation.y
+//                                               , msg2->pose.orientation.z
+//                                               , msg2->pose.orientation.w);
 
   amostra++; // Aqui controla quantas vezes leremos, para nao ser eterno e salvar log
 
@@ -79,10 +80,10 @@ void escutar_pose(const nav_msgs::OdometryConstPtr& msg, const geometry_msgs::Po
   ponto_atual.header.frame_id = "/local_origin_ned";
   ponto_atual.header.stamp = caminho.header.stamp;
   ponto_atual.ns = "atual";
-  ponto_atual.action = visualization_msgs::Marker::ADD;
-  ponto_atual.pose.position.x = p.x;
-  ponto_atual.pose.position.y = p.y;
-  ponto_atual.pose.position.z = p.z;
+  ponto_atual.action = visualization_msgs::Marker::MODIFY;
+  ponto_atual.pose.position.x = msg->twist.twist.linear.x;
+  ponto_atual.pose.position.y = msg->twist.twist.linear.y;
+  ponto_atual.pose.position.z = msg->twist.twist.linear.z;
   ponto_atual.pose.orientation.x = msg2->pose.orientation.x;
   ponto_atual.pose.orientation.y = msg2->pose.orientation.y;
   ponto_atual.pose.orientation.z = msg2->pose.orientation.z;
@@ -106,12 +107,20 @@ int main(int argc, char **argv)
   ros::ServiceClient srv = nh.serviceClient<mavros_msgs::StreamRate>("/mavros/set_stream_rate");
   mavros_msgs::StreamRate rate;
   rate.request.stream_id = 0;
-  rate.request.message_rate = 10; // 10 Hz das mensagens que vem
+  rate.request.message_rate = 40; // X Hz das mensagens que vem
   rate.request.on_off = 1; // Nao sei
   if(srv.call(rate))
     ROS_INFO("Taxado mavros mudada para %d Hz", rate.request.message_rate);
   else
     ROS_INFO("Nao pode chamar o servico, taxa nao mudada.");
+  // Armando o veiculo nesse caso
+  ros::ServiceClient armar_srv = nh.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
+  mavros_msgs::CommandBool armar;
+  armar.request.value = true;
+  if(armar_srv.call(armar))
+    ROS_INFO("Veiculo armado para salvar origem.");
+  else
+    ROS_INFO("Nao foi possivel armar o veiculo.");
 
   // Caracteristica do plot no RViz do caminho
   caminho.type = visualization_msgs::Marker::SPHERE_LIST;
