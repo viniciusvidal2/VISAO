@@ -26,7 +26,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void read_camera_calibration(Mat &matrix){
     // Usar os valores de left.yaml
-    float fx = 1765.159257291513, fy = 1705.370761980893, cx = 755.431601581711, cy = 591.0292653288053;
+    float fx = 1765.159257291513/2, fy = 1705.370761980893/2, cx = 755.431601581711/2, cy = 591.0292653288053/2;
     matrix = (Mat1d(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,7 +37,7 @@ public:
 
     FlannBasedMatcher matcher;
     vector<KeyPoint> keypoints_left, keypoints_right;
-    std::vector<DMatch> matches;
+    vector<DMatch> matches;
 
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
 
@@ -49,8 +49,8 @@ public:
         Mat image_kpts_left, image_kpts_right;
         drawKeypoints( image_left , keypoints_left , image_kpts_left , Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
         drawKeypoints( image_right, keypoints_right, image_kpts_right, Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
-        namedWindow("Keypoints left" , WINDOW_KEEPRATIO);
-        namedWindow("Keypoints right", WINDOW_KEEPRATIO);
+        namedWindow("Keypoints left" , WINDOW_NORMAL);
+        namedWindow("Keypoints right", WINDOW_NORMAL);
         imshow("Keypoints left" , image_kpts_left );
         imshow("Keypoints right", image_kpts_right );
         waitKey(1);
@@ -100,7 +100,7 @@ public:
       // Limpando para proxima iteracao, se existir
 //      ROS_INFO("Quantas better matches: %d", better_matches.size());
       if(better_matches.size() < min_matches){
-        min_hessian = 0.9*min_hessian;
+        min_hessian = 0.8*min_hessian;
         matches.clear();
         keypoints_left.clear();
         keypoints_right.clear();
@@ -113,15 +113,56 @@ public:
       }
     } // Fim do while
     if (visualizar){
-      Mat img_matches;
+      Mat img_matches, img_matches_disp;
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+      resize(img_matches, img_matches_disp, Size(img_matches.cols/2, img_matches.rows/2));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
-      imshow("All Matches", img_matches);
+      imshow("All Matches", img_matches_disp);
       waitKey(0);
     }
   } // Fim do void
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /// Calculos a partir da matriz com teoria baseada nas fontes:
+  /// http://planning.cs.uiuc.edu/node102.html#eqn:yprmat
+  /// http://planning.cs.uiuc.edu/node103.html
+  /// Algoritmo semelhante ao exemplo encontrado em opencv na fonte:
+  /// https://www.learnopencv.com/rotation-matrix-to-euler-angles/
+  void rpy_from_rotation(Mat R, float &r, float &p, float &y){
+    bool singular;
+    // ROLL
+    singular = R.at<double>(2, 2) < 1e-6;
+    if (!singular){
+      r = atan2(R.at<double>(2, 1), R.at<double>(2, 2));
+    } else {
+      if(R.at<double>(1, 1) > 0)
+        r = M_PI_2;
+      else
+        r = M_PI + M_PI_2;
+    }
+    // PITCH
+    float sp = sqrt(R.at<double>(2, 1)*R.at<double>(2, 1) + R.at<double>(2, 2)*R.at<double>(2, 2));
+    singular = sp < 1e-5;
+    if(!singular){
+      p = atan2(-R.at<double>(2, 0), sp);
+    } else {
+      if(-R.at<double>(2, 0) > 0)
+        p = M_PI_2;
+      else
+        p = M_PI + M_PI_2;
+    }
+    // YAW
+    singular = R.at<double>(0, 0) < 1e-6;
+    if(!singular){
+      y = atan2(R.at<double>(1, 0), R.at<double>(0, 0));
+    } else {
+      if (R.at<double>(1, 0) > 0)
+        y = M_PI_2;
+      else
+        y = M_PI + M_PI_2;
+    }
+  }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_visualizar(bool vis){
     visualizar = vis;
