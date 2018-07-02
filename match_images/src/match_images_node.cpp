@@ -36,12 +36,12 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   // Objeto da classe que trabalha o pipeline da imagem, somente .cpp, porque ficou de viadagem
   Imagem im;
-  im.set_visualizar(true);
+  im.set_visualizar(false);
 
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
-  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/pares_stereo/left/lab_1.jpg";
-  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/pares_stereo/right/lab_1.jpg";
+  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/piano/im0.png";
+  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/piano/im1.png";
 
   image_left  = imread(path_left.c_str() , IMREAD_COLOR);
   image_right = imread(path_right.c_str(), IMREAD_COLOR);
@@ -57,7 +57,7 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          50000, 8, better_matches);
+                          9000, 800, better_matches);
 
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
@@ -68,8 +68,8 @@ int main(int argc, char **argv)
   correctMatches(F, keypoints_filt_left, keypoints_filt_right, keypoints_filt_left_new, keypoints_filt_right_new);
 
   // Ler o arquivo de calibracao YAML na pasta calibracao
-  Mat K;
-  im.read_camera_calibration(K);
+  Mat K, dist_coef, rect; // matriz intrinseca, coeficientes de distorcao e matriz de retificacao
+  im.read_camera_calibration("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/piano.yaml", K, dist_coef, rect);
   cout << "Camera matrix K:\n" << K << endl;
 
   // Matriz essencial
@@ -81,7 +81,6 @@ int main(int argc, char **argv)
   Mat R, t;
   int inliers;
 //  decomposeEssentialMat(E, R1, R2, t);
-
   inliers = recoverPose(E, keypoints_filt_left, keypoints_filt_right, K, R, t);
   cout << "Matriz rotacao R:\n"    << R       << endl;
   cout << "Matriz translacao t:\n" << t       << endl;
@@ -103,10 +102,11 @@ int main(int argc, char **argv)
   cout << endl << "roll: " << degrees(roll) << "\t" << "pitch: " << degrees(pitch) << "\t" << "yaw: " << degrees(yaw) << endl;
 
   // Triangulacao dos pontos - https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html#triangulatepoints
-  Mat points3d;
+  Mat points3d(Size(4, int(keypoints_filt_left_new.size())), CV_64FC1);
   triangulatePoints(P1, P2, keypoints_filt_left_new, keypoints_filt_right_new, points3d);
-  ROS_INFO("quantos keypoints: %d\t%d", keypoints_filt_left_new.size(), keypoints_filt_right_new.size());
-  cout << "Pontos 3D:\n" << points3d << endl;
+
+  // Visualizacao dos pontos 3D
+  im.visualize_cloud(points3d);
 
   // Mapa de disparidade?
 //  Mat disparity;

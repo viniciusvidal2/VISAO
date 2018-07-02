@@ -8,9 +8,13 @@ project(match_images)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp cv_bridge sensor_msgs std_msgs image_transport
+  roscpp cv_bridge sensor_msgs std_msgs image_transport pcl_ros pcl_conversions
 )
 find_package(OpenCV REQUIRED)
+find_package(PCL 1.2 REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -149,6 +153,7 @@ include_directories(
  target_link_libraries(match_images_node
    ${catkin_LIBRARIES}
    ${OpenCV_LIBS}
+   ${PCL_LIBRARIES}
  )
 
 #############

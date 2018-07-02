@@ -1,0 +1,9 @@
+%YAML:1.0
+image_width: 2820
+image_height: 1920
+camera_name: left_optical
+camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [2826.171, 0, 1292.2, 0, 2826.171, 965.806, 0, 0, 1]

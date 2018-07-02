@@ -11,23 +11,41 @@
 
 #include <opencv2/calib3d.hpp>
 
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/point_types_conversion.h>
+#include <pcl/io/vtk_lib_io.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/visualization/pcl_visualizer.h>
+
+#include <boost/thread/thread.hpp>
 #include <iostream>
 #include <string>
 
 #include <ros/ros.h>
 
+using namespace pcl;
+using namespace pcl::visualization;
 using namespace cv;
 using namespace cv::xfeatures2d;
 using namespace std;
+
+typedef PointXYZRGB PointT;
 
 class Imagem
 {
 public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void read_camera_calibration(Mat &matrix){
-    // Usar os valores de left.yaml
-    float fx = 1765.159257291513/2, fy = 1705.370761980893/2, cx = 755.431601581711/2, cy = 591.0292653288053/2;
-    matrix = (Mat1d(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
+  void read_camera_calibration(string filename, Mat &K, Mat &dist_coef, Mat &rect){
+    FileStorage fs;
+    fs.open(filename, FileStorage::READ);
+    fs["camera_matrix"] >> K;
+    fs["distortion_coefficients"] >> dist_coef;
+    fs["rectification_matrix"] >> rect;
+    fs.release();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void get_kpts_and_matches(Mat image_left, Mat image_right,
@@ -57,11 +75,8 @@ public:
       }
 
       // Fazer match de features
-//      ROS_INFO("Quantos descriptors left: %d", *descriptors_left.size.p);
-//      ROS_INFO("Quantos descriptors right: %d", *descriptors_right.size.p);
       if (!descriptors_left.empty() && !descriptors_right.empty())
         matcher.match(descriptors_left, descriptors_right, matches);
-//      ROS_INFO("Quantas matches: %d", matches.size());
       // Limpar mas correspondencias tendo nocao da visao stereo
       float y_left, y_right;
       int min_pixel_diff = 5;
@@ -70,16 +85,10 @@ public:
       for (int i = 0; i < matches.size(); i++){
         y_left  = keypoints_left[matches[i].queryIdx].pt.y;
         y_right = keypoints_right[matches[i].trainIdx].pt.y;
-//        cout << "Y na esquerda: " << y_left  << " do Keypoint " << matches[i].queryIdx << endl;
-//        cout << "Y na direita:  " << y_right << " do Keypoint " << matches[i].trainIdx << endl;
-//        cout << "A diferenca em y " << abs(y_left - y_right) << endl;
-//        cout << "A distancia entre as marcacoes " << matches[i].distance << endl;
         if (abs(y_left - y_right) < min_pixel_diff){
           good_matches.push_back(matches[i]);
         }
-//        cout << endl << endl;
       }
-//      ROS_INFO("Quantas good matches: %d", good_matches.size());
 
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
@@ -97,8 +106,8 @@ public:
           keypoints_filt_right.push_back(keypoints_right[good_matches[i].trainIdx].pt);
         }
       }
+//      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Limpando para proxima iteracao, se existir
-//      ROS_INFO("Quantas better matches: %d", better_matches.size());
       if(better_matches.size() < min_matches){
         min_hessian = 0.8*min_hessian;
         matches.clear();
@@ -112,6 +121,7 @@ public:
         good_matches.clear();
       }
     } // Fim do while
+
     if (visualizar){
       Mat img_matches, img_matches_disp;
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
@@ -164,6 +174,39 @@ public:
     }
   }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void vector2mat(vector<Point2f> pl, vector<Point2f> pr, Mat &plm, Mat &prm){
+    for(int i=0; i<pl.size(); i++){ // Os vetores tendem a ser do mesmo tamanho sempre, sao filtrados la atras
+      plm.at<float>(i, 1) = pl[i].x;
+      plm.at<float>(i, 2) = pl[i].y;
+      prm.at<float>(i, 1) = pr[i].x;
+      prm.at<float>(i, 2) = pr[i].y;
+    }
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void visualize_cloud(Mat c){
+    int pts = c.cols;
+    cloud =  (PointCloud<PointT>::Ptr) new PointCloud<PointT>;
+    cloud->points.reserve(pts);
+    PointT point;
+    for(int i=0; i < pts; i++){
+      point.x = c.at<float>(0, i)/c.at<float>(3, i);
+      point.y = c.at<float>(1, i)/c.at<float>(3, i);
+      point.z = c.at<float>(2, i)/c.at<float>(3, i);
+      point.r = 250.0f;
+      point.g = 250.0f;
+      point.b = 250.0f;
+      cloud->push_back(point);
+    }
+    boost::shared_ptr<PCLVisualizer> vis (new PCLVisualizer("cloud_viewer"));
+    PointCloudColorHandlerRGBField<PointT> rgb(cloud);
+    vis->addPointCloud<PointT>(cloud, rgb, "cloud");
+    vis->addCoordinateSystem (1.0);
+//    vis->resetCameraViewpoint("cloud");
+    vis->setPointCloudRenderingProperties(PCL_VISUALIZER_POINT_SIZE, 4, "cloud");
+    vis->initCameraParameters();
+    vis->spin();
+  }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_visualizar(bool vis){
     visualizar = vis;
   }
@@ -171,4 +214,6 @@ public:
 
 private:
   bool visualizar;
+  PointCloud<PointT>::Ptr cloud;
+
 };
