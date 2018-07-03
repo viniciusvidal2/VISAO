@@ -25,31 +25,39 @@ using namespace cv::xfeatures2d;
 using namespace std;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-float degrees(float rad){
-  return rad * 180.0/M_PI;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "match_images_node");
   ros::NodeHandle nh;
   // Objeto da classe que trabalha o pipeline da imagem, somente .cpp, porque ficou de viadagem
   Imagem im;
-  im.set_visualizar(false);
+  im.set_visualizar(true);
 
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
-  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/piano/im0.png";
-  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/piano/im1.png";
+  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/wally/15.jpg";
+  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/wally/16.jpg";
 
   image_left  = imread(path_left.c_str() , IMREAD_COLOR);
   image_right = imread(path_right.c_str(), IMREAD_COLOR);
 
   if (image_left.empty()){
-    cout <<  "Could not open or find the image" << endl ;
+    cout <<  "Could not open or find the image" << endl;
     return -1;
   }
+
+//  // Rotacionar a imagem de sacanagem
+//  double angle = 30;
+
+//  // get rotation matrix for rotating the image around its center in pixel coordinates
+//  Point2f center((image_right.cols-1)/2.0, (image_right.rows-1)/2.0);
+//  Mat rot = getRotationMatrix2D(center, angle, 1.0);
+//  // determine bounding rectangle, center not relevant
+//  Rect2f bbox = RotatedRect(Point2f(), image_right.size(), angle).boundingRect2f();
+//  // adjust transformation matrix
+//  rot.at<double>(0,2) += bbox.width/2.0 - image_right.cols/2.0;
+//  rot.at<double>(1,2) += bbox.height/2.0 - image_right.rows/2.0;
+//  cv::warpAffine(image_right, image_right, rot, bbox.size());
 
   // Obter keypoints, features e match das mesmas. Filtrar os matchs obtidos
   vector<Point2f> keypoints_filt_left, keypoints_filt_right;
@@ -57,7 +65,7 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          9000, 800, better_matches);
+                          15000, 10, better_matches);
 
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
@@ -69,7 +77,7 @@ int main(int argc, char **argv)
 
   // Ler o arquivo de calibracao YAML na pasta calibracao
   Mat K, dist_coef, rect; // matriz intrinseca, coeficientes de distorcao e matriz de retificacao
-  im.read_camera_calibration("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/piano.yaml", K, dist_coef, rect);
+  im.read_camera_calibration("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml", K, dist_coef, rect);
   cout << "Camera matrix K:\n" << K << endl;
 
   // Matriz essencial
@@ -78,9 +86,8 @@ int main(int argc, char **argv)
   cout << "Matriz essencial E:\n" << E << endl;
 
   // Descobrir a forma certa das quatro opcoes para matriz essencial
-  Mat R, t;
+  Mat R, t, rod;
   int inliers;
-//  decomposeEssentialMat(E, R1, R2, t);
   inliers = recoverPose(E, keypoints_filt_left, keypoints_filt_right, K, R, t);
   cout << "Matriz rotacao R:\n"    << R       << endl;
   cout << "Matriz translacao t:\n" << t       << endl;
@@ -97,9 +104,14 @@ int main(int argc, char **argv)
 //  cout << "Matriz Projecao P2:\n"  << P2      << endl;
 
   // Obtendo angulos RPY a partir da matriz de rotacao
-  float roll, pitch, yaw; // [rad]
-  im.rpy_from_rotation(R, roll, pitch, yaw);
-  cout << endl << "roll: " << degrees(roll) << "\t" << "pitch: " << degrees(pitch) << "\t" << "yaw: " << degrees(yaw) << endl;
+  // YAW -> eixo Z saindo do plano da imagem; camera positivo anti-horario de giro; image positivo horario de giro.
+//  float roll, pitch, yaw; // [rad]
+//  im.rpy_from_rotation(R, roll, pitch, yaw);
+  Rodrigues(R, rod);
+  cout << "Rodrigues: \n" << rod << endl;
+  cout << endl << "roll: " << RAD2DEG(rod.at<double>(0, 0)) << "\t" << "pitch: " << RAD2DEG(rod.at<double>(1, 0)) <<
+                  "\t" << "yaw: " << RAD2DEG(rod.at<double>(2, 0)) << endl;
+//  cout << endl << "roll: " << RAD2DEG(roll) << "\t" << "pitch: " << RAD2DEG(pitch) << "\t" << "yaw: " << RAD2DEG(yaw) << endl;
 
   // Triangulacao dos pontos - https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html#triangulatepoints
   Mat points3d(Size(4, int(keypoints_filt_left_new.size())), CV_64FC1);

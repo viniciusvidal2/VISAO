@@ -77,33 +77,33 @@ public:
       // Fazer match de features
       if (!descriptors_left.empty() && !descriptors_right.empty())
         matcher.match(descriptors_left, descriptors_right, matches);
-      // Limpar mas correspondencias tendo nocao da visao stereo
-      float y_left, y_right;
-      int min_pixel_diff = 5;
-      vector<DMatch> good_matches;
+//      // Limpar mas correspondencias tendo nocao da visao stereo
+//      float y_left, y_right;
+//      int min_pixel_diff = 5;
+//      vector<DMatch> good_matches;
 
-      for (int i = 0; i < matches.size(); i++){
-        y_left  = keypoints_left[matches[i].queryIdx].pt.y;
-        y_right = keypoints_right[matches[i].trainIdx].pt.y;
-        if (abs(y_left - y_right) < min_pixel_diff){
-          good_matches.push_back(matches[i]);
-        }
-      }
+//      for (int i = 0; i < matches.size(); i++){
+//        y_left  = keypoints_left[matches[i].queryIdx].pt.y;
+//        y_right = keypoints_right[matches[i].trainIdx].pt.y;
+//        if (abs(y_left - y_right) < min_pixel_diff){
+//          good_matches.push_back(matches[i]);
+//        }
+//      }
 
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
-      for( int i = 0; i < good_matches.size(); i++ ){
-        double dist = good_matches[i].distance;
+      for( int i = 0; i < matches.size(); i++ ){
+        double dist = matches[i].distance;
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 3*min_dist;
+      float thresh_dist = 2*min_dist;
 
-      for(int i = 0; i < good_matches.size(); i++){
-        if (good_matches[i].distance < thresh_dist){
-          better_matches.push_back(good_matches[i]);
-          keypoints_filt_left.push_back(keypoints_left[good_matches[i].queryIdx].pt);
-          keypoints_filt_right.push_back(keypoints_right[good_matches[i].trainIdx].pt);
+      for(int i = 0; i < matches.size(); i++){
+        if (matches[i].distance < thresh_dist){
+          better_matches.push_back(matches[i]);
+          keypoints_filt_left.push_back(keypoints_left[matches[i].queryIdx].pt);
+          keypoints_filt_right.push_back(keypoints_right[matches[i].trainIdx].pt);
         }
       }
 //      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
@@ -118,7 +118,7 @@ public:
         better_matches.clear();
         keypoints_filt_left.clear();
         keypoints_filt_right.clear();
-        good_matches.clear();
+//        good_matches.clear();
       }
     } // Fim do while
 
@@ -127,7 +127,7 @@ public:
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-      resize(img_matches, img_matches_disp, Size(img_matches.cols/2, img_matches.rows/2));
+      resize(img_matches, img_matches_disp, Size(img_matches.cols/4, img_matches.rows/4));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
       imshow("All Matches", img_matches_disp);
       waitKey(0);
@@ -182,7 +182,7 @@ public:
       prm.at<float>(i, 2) = pr[i].y;
     }
   }
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualize_cloud(Mat c){
     int pts = c.cols;
     cloud =  (PointCloud<PointT>::Ptr) new PointCloud<PointT>;
