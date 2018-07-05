@@ -133,7 +133,25 @@ public:
       waitKey(0);
     }
   } // Fim do void
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void filter_bins(vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
+                   vector<Point2f> &kptl_new, vector<Point2f> &kptr_new, vector<DMatch> &better_matches){
+    // Keypoints ja correspondem um a um nesse estagio.
+    // Guardar coordenadas dos pontos
+    // Criar um bin em torno do ponto na imagem anterior (no caso da esquerda) atentando aos limites da imagem.
+    // Confeir se as coordenadas do ponto da imagem atual (ou da direita) estao dentro do bin
+    // Adicionar aos vetores de pontos correspondentes filtrados
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void filter_lines(vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
+                    vector<Point2f> &kptl_new, vector<Point2f> &kptr_new, vector<DMatch> &better_matches){
+    // Keypoints ja correspondem um a um nesse estagio.
+    // Guardar coordenadas dos pontos
+    // Posicionando imagens lado a lado, (anterior a esquerda, atual a direita), calcular coef. angular
+    // Criar media e desvio padrao do coef. angular
+    // Checar quem esta dentro de um desvio padrao
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /// Calculos a partir da matriz com teoria baseada nas fontes:
   /// http://planning.cs.uiuc.edu/node102.html#eqn:yprmat
   /// http://planning.cs.uiuc.edu/node103.html
@@ -173,7 +191,7 @@ public:
         y = M_PI + M_PI_2;
     }
   }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void vector2mat(vector<Point2f> pl, vector<Point2f> pr, Mat &plm, Mat &prm){
     for(int i=0; i<pl.size(); i++){ // Os vetores tendem a ser do mesmo tamanho sempre, sao filtrados la atras
       plm.at<float>(i, 1) = pl[i].x;
@@ -206,14 +224,24 @@ public:
     vis->initCameraParameters();
     vis->spin();
   }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_visualizar(bool vis){
     visualizar = vis;
   }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void set_quadrados(int cols, int rows, int m, int n){
+    M = m;
+    N = n;
+    w = int(cols/m);
+    h = int(rows/n);
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 private:
   bool visualizar;
   PointCloud<PointT>::Ptr cloud;
-
+  int M; // Quantos quadrados no eixo  X (columns)
+  int N; // Quantos quadrados no eixo -Y (rows)
+  int w; // Largura dos quadrados no eixo  X
+  int h; // Altura dos quadrados no eixo -Y
 };
