@@ -77,18 +77,6 @@ public:
       // Fazer match de features
       if (!descriptors_left.empty() && !descriptors_right.empty())
         matcher.match(descriptors_left, descriptors_right, matches);
-//      // Limpar mas correspondencias tendo nocao da visao stereo
-//      float y_left, y_right;
-//      int min_pixel_diff = 5;
-//      vector<DMatch> good_matches;
-
-//      for (int i = 0; i < matches.size(); i++){
-//        y_left  = keypoints_left[matches[i].queryIdx].pt.y;
-//        y_right = keypoints_right[matches[i].trainIdx].pt.y;
-//        if (abs(y_left - y_right) < min_pixel_diff){
-//          good_matches.push_back(matches[i]);
-//        }
-//      }
 
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
@@ -97,7 +85,7 @@ public:
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 2*min_dist;
+      float thresh_dist = 4*min_dist;
 
       for(int i = 0; i < matches.size(); i++){
         if (matches[i].distance < thresh_dist){
@@ -106,6 +94,12 @@ public:
           keypoints_filt_right.push_back(keypoints_right[matches[i].trainIdx].pt);
         }
       }
+      // Filtrando por bins
+      vector<DMatch> bin_matches = better_matches;
+      vector<Point2f> keypoints_filt_left_bin, keypoints_filt_right_bin;
+      filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, bin_matches,
+                  keypoints_filt_left_bin, keypoints_filt_right_bin, better_matches);
+
 //      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
@@ -118,7 +112,8 @@ public:
         better_matches.clear();
         keypoints_filt_left.clear();
         keypoints_filt_right.clear();
-//        good_matches.clear();
+        keypoints_filt_left_bin.clear();
+        keypoints_filt_right_bin.clear();
       }
     } // Fim do while
 
@@ -134,13 +129,31 @@ public:
     }
   } // Fim do void
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void filter_bins(vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
+  void filter_bins(Mat pic, vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
                    vector<Point2f> &kptl_new, vector<Point2f> &kptr_new, vector<DMatch> &better_matches){
     // Keypoints ja correspondem um a um nesse estagio.
-    // Guardar coordenadas dos pontos
-    // Criar um bin em torno do ponto na imagem anterior (no caso da esquerda) atentando aos limites da imagem.
-    // Confeir se as coordenadas do ponto da imagem atual (ou da direita) estao dentro do bin
-    // Adicionar aos vetores de pontos correspondentes filtrados
+    better_matches.clear();
+//    cout << "largura do quadrado " << w << " e a altura " << h << endl;
+    float lim_x_left, lim_x_right, lim_y_down, lim_y_up;
+    for(int i=0; i<kptl.size(); i++){
+      // Guardar coordenadas dos pontos
+      float xl = kptl[i].x, yl = kptl[i].y;
+      float xr = kptr[i].x, yr = kptr[i].y;
+      // Criar um bin em torno do ponto na imagem anterior (no caso da esquerda) atentando aos limites da imagem.
+      lim_x_left  = (xl - w/2) >= 0        ? xl - w/2 : 0;
+      lim_x_right = (xl + w/2) <  pic.cols ? xl + w/2 : pic.cols-1;
+      lim_y_up    = (yl - h/2) >= 0        ? yl - h/2 : 0;
+      lim_y_down  = (yl + h/2) <  pic.rows ? yl + h/2 : pic.rows-1;
+      // Confeir se as coordenadas do ponto da imagem atual (ou da direita) estao dentro do bin
+      if(lim_x_left < xr && xr < lim_x_right && lim_y_up < yr && yr < lim_y_down){
+        kptl_new.push_back(kptl[i]);
+        kptr_new.push_back(kptr[i]);
+        better_matches.push_back(matches[i]);
+//        cout << "Passou a correspondencia " << i << " do ponto " << xl << " " << yl << endl;
+//        cout << "Limites de X: " << lim_x_left << " " << xr << " " << lim_x_right << endl;
+//        cout << "Limites de Y: " << lim_y_up   << " " << yr << " " << lim_y_down  << endl;
+      }
+    }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void filter_lines(vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
@@ -229,11 +242,38 @@ public:
     visualizar = vis;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void set_quadrados(int cols, int rows, int m, int n){
+  void set_quadrados(Mat pict, int m, int n, bool vis){
     M = m;
     N = n;
-    w = int(cols/m);
-    h = int(rows/n);
+    w = int(pict.cols/m);
+    h = int(pict.rows/n);
+    int key = 0;
+
+    if(vis){
+      Mat pic; pict.copyTo(pic);
+      while(key!=115){
+        for(int i=0; i<pic.cols; i=i+w)
+          line(pic, Point(i, 0), Point(i, pic.rows), Scalar(255), 20, 7, 0);
+        for(int j=0; j<pic.rows; j=j+h)
+          line(pic, Point(0, j), Point(pic.cols, j), Scalar(255), 20, 7, 0);
+        putText(pic, "Se bom aperte s", cvPoint(pic.cols/10, pic.rows/4),  FONT_HERSHEY_COMPLEX, 10,
+                cvScalar(0, 250, 0), 10, CV_AA);
+        putText(pic, "senao aperte n", cvPoint(pic.cols/10, 3*pic.rows/4), FONT_HERSHEY_COMPLEX, 10,
+                cvScalar(0, 250, 0), 10, CV_AA);
+
+        namedWindow("testando", WINDOW_GUI_NORMAL);
+        imshow("testando", pic);
+        key = waitKey(0);
+        if(key == 115){   // S
+          return;
+        } else if(key == 110){ // N
+          M = M*2; N = N*2;
+          w = w/2; h = h/2;
+          pict.copyTo(pic);
+          cout << "M: " << M << "\tN: " << N << endl;
+        }
+      }
+    }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -243,5 +283,5 @@ private:
   int M; // Quantos quadrados no eixo  X (columns)
   int N; // Quantos quadrados no eixo -Y (rows)
   int w; // Largura dos quadrados no eixo  X
-  int h; // Altura dos quadrados no eixo -Y
+  int h; // Altura dos quadrados no eixo  -Y
 };

@@ -46,6 +46,8 @@ int main(int argc, char **argv)
     return -1;
   }
 
+  im.set_quadrados(image_left, 10, 10, false);
+
 //  // Rotacionar a imagem de sacanagem
 //  double angle = 30;
 
@@ -65,7 +67,7 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          15000, 10, better_matches);
+                          2000, 7, better_matches);
 
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
@@ -91,7 +93,7 @@ int main(int argc, char **argv)
   inliers = recoverPose(E, keypoints_filt_left, keypoints_filt_right, K, R, t);
   cout << "Matriz rotacao R:\n"    << R       << endl;
   cout << "Matriz translacao t:\n" << t       << endl;
-  cout << "Inliers:  "             << inliers << endl;
+  cout << "Inliers:  "             << inliers << " de " << keypoints_filt_left.size() << endl;
 
   // Matriz de projecao
   Mat rt1, rt2, P1, P2;
@@ -104,11 +106,11 @@ int main(int argc, char **argv)
 //  cout << "Matriz Projecao P2:\n"  << P2      << endl;
 
   // Obtendo angulos RPY a partir da matriz de rotacao
-  // YAW -> eixo Z saindo do plano da imagem; camera positivo anti-horario de giro; image positivo horario de giro.
+  // YAW   -> eixo Z saindo do plano da imagem; camera positivo anti-horario de giro; imagem positivo horario de giro.
+  // PITCH -> eixo X apontando para a direita da imagem; camera positivo sentido horario da origem para ponta do eixo ("para baixo")
 //  float roll, pitch, yaw; // [rad]
 //  im.rpy_from_rotation(R, roll, pitch, yaw);
   Rodrigues(R, rod);
-  cout << "Rodrigues: \n" << rod << endl;
   cout << endl << "roll: " << RAD2DEG(rod.at<double>(0, 0)) << "\t" << "pitch: " << RAD2DEG(rod.at<double>(1, 0)) <<
                   "\t" << "yaw: " << RAD2DEG(rod.at<double>(2, 0)) << endl;
 //  cout << endl << "roll: " << RAD2DEG(roll) << "\t" << "pitch: " << RAD2DEG(pitch) << "\t" << "yaw: " << RAD2DEG(yaw) << endl;
