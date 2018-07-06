@@ -1,0 +1,4 @@
+<launch>
+    <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_node" output="screen">
+    </node>
+</launch>

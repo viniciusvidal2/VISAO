@@ -86,7 +86,7 @@ public:
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 4*min_dist;
+      float thresh_dist = 3*min_dist;
 
       for(int i = 0; i < matches.size(); i++){
         if (matches[i].distance < thresh_dist){ // Aqui crio matches novo e vetor dos pontos dos keypoints ORGANIZADOS,
@@ -103,7 +103,7 @@ public:
       ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
-        min_hessian = 0.8*min_hessian;
+        min_hessian = 0.7*min_hessian;
         matches.clear();
         keypoints_left.clear();
         keypoints_right.clear();
@@ -113,6 +113,7 @@ public:
         keypoints_filt_left.clear();
         keypoints_filt_right.clear();
       }
+
     } // Fim do while
 
     if (visualizar){
@@ -151,8 +152,8 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void filter_lines(Mat pic, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
     // Keypoints ja correspondem um a um nesse estagio.
-    double temp_coef, mean_coef, sum_coef = 0, stdev_coef;
-    float rate = 1.0; // Quantos desvios padroes vao passar
+    double mean_coef, sum_coef = 0, stdev_coef;
+    float  rate = 0.5; // Quantos desvios padroes vao passar
     vector<float> coefs(kptl.size());
     for(int i=0; i<kptl.size(); i++){
       // Guardar coordenadas dos pontos
@@ -160,14 +161,13 @@ public:
       float xr = kptr[i].x + pic.cols, yr = kptr[i].y; // Como se a segunda imagem estivesse a direita
       // Posicionando imagens lado a lado, (anterior a esquerda, atual a direita), calcular coef. angular
       coefs[i] = (yr - yl)/(xr - xl);
-      temp_coef = (yr - yl)/(xr - xl);
-      sum_coef += temp_coef;
     }
     // Criar media e desvio padrao do coef. angular
     mean_coef = accumulate(coefs.begin(), coefs.end(), 0.0)/coefs.size();
     for(vector<float>::iterator it=coefs.begin(); it!=coefs.end(); it++)
         sum_coef += (*it - mean_coef) * (*it - mean_coef);
     stdev_coef = sqrt( sum_coef/(coefs.size()-1) );
+    cout << "MEDIA: " << mean_coef << "\tSTD_DEV: " << stdev_coef << endl;
     // Checar quem esta dentro de um desvio padrao
     for(int i=0; i<kptl.size(); i++){
       if( (coefs[i] < (mean_coef-stdev_coef*rate)) || (coefs[i] > (mean_coef+stdev_coef*rate)) ){ // Se fora dos limites
