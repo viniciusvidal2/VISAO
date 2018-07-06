@@ -24,6 +24,7 @@
 #include <boost/thread/thread.hpp>
 #include <iostream>
 #include <string>
+#include <numeric>
 
 #include <ros/ros.h>
 
@@ -88,19 +89,18 @@ public:
       float thresh_dist = 4*min_dist;
 
       for(int i = 0; i < matches.size(); i++){
-        if (matches[i].distance < thresh_dist){
-          better_matches.push_back(matches[i]);
+        if (matches[i].distance < thresh_dist){ // Aqui crio matches novo e vetor dos pontos dos keypoints ORGANIZADOS,
+          better_matches.push_back(matches[i]); // porem daqui em diante apago os que nao forem bons
           keypoints_filt_left.push_back(keypoints_left[matches[i].queryIdx].pt);
           keypoints_filt_right.push_back(keypoints_right[matches[i].trainIdx].pt);
         }
       }
       // Filtrando por bins
-      vector<DMatch> bin_matches = better_matches;
-      vector<Point2f> keypoints_filt_left_bin, keypoints_filt_right_bin;
-      filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, bin_matches,
-                  keypoints_filt_left_bin, keypoints_filt_right_bin, better_matches);
+      filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
+      // Filtrando por coeficiente angular
+      filter_lines(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
 
-//      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
         min_hessian = 0.8*min_hessian;
@@ -112,8 +112,6 @@ public:
         better_matches.clear();
         keypoints_filt_left.clear();
         keypoints_filt_right.clear();
-        keypoints_filt_left_bin.clear();
-        keypoints_filt_right_bin.clear();
       }
     } // Fim do while
 
@@ -129,11 +127,8 @@ public:
     }
   } // Fim do void
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void filter_bins(Mat pic, vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
-                   vector<Point2f> &kptl_new, vector<Point2f> &kptr_new, vector<DMatch> &better_matches){
+  void filter_bins(Mat pic, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
     // Keypoints ja correspondem um a um nesse estagio.
-    better_matches.clear();
-//    cout << "largura do quadrado " << w << " e a altura " << h << endl;
     float lim_x_left, lim_x_right, lim_y_down, lim_y_up;
     for(int i=0; i<kptl.size(); i++){
       // Guardar coordenadas dos pontos
@@ -145,25 +140,45 @@ public:
       lim_y_up    = (yl - h/2) >= 0        ? yl - h/2 : 0;
       lim_y_down  = (yl + h/2) <  pic.rows ? yl + h/2 : pic.rows-1;
       // Confeir se as coordenadas do ponto da imagem atual (ou da direita) estao dentro do bin
-      if(lim_x_left < xr && xr < lim_x_right && lim_y_up < yr && yr < lim_y_down){
-        kptl_new.push_back(kptl[i]);
-        kptr_new.push_back(kptr[i]);
-        better_matches.push_back(matches[i]);
-//        cout << "Passou a correspondencia " << i << " do ponto " << xl << " " << yl << endl;
-//        cout << "Limites de X: " << lim_x_left << " " << xr << " " << lim_x_right << endl;
-//        cout << "Limites de Y: " << lim_y_up   << " " << yr << " " << lim_y_down  << endl;
+      if( !(lim_x_left < xr && xr < lim_x_right && lim_y_up < yr && yr < lim_y_down) ){ // Se nao estao, apaga
+        kptl.erase(kptl.begin()+i);
+        kptr.erase(kptr.begin()+i);
+        matches.erase(matches.begin()+i);
+        i = i - 1; // Para nao pular um elemento
       }
-    }
-  }
+    } // Fim do for
+  } // Fim do void
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void filter_lines(vector<Point2f> kptl, vector<Point2f> kptr, vector<DMatch> matches,
-                    vector<Point2f> &kptl_new, vector<Point2f> &kptr_new, vector<DMatch> &better_matches){
+  void filter_lines(Mat pic, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
     // Keypoints ja correspondem um a um nesse estagio.
-    // Guardar coordenadas dos pontos
-    // Posicionando imagens lado a lado, (anterior a esquerda, atual a direita), calcular coef. angular
+    double temp_coef, mean_coef, sum_coef = 0, stdev_coef;
+    float rate = 1.0; // Quantos desvios padroes vao passar
+    vector<float> coefs(kptl.size());
+    for(int i=0; i<kptl.size(); i++){
+      // Guardar coordenadas dos pontos
+      float xl = kptl[i].x,            yl = kptl[i].y;
+      float xr = kptr[i].x + pic.cols, yr = kptr[i].y; // Como se a segunda imagem estivesse a direita
+      // Posicionando imagens lado a lado, (anterior a esquerda, atual a direita), calcular coef. angular
+      coefs[i] = (yr - yl)/(xr - xl);
+      temp_coef = (yr - yl)/(xr - xl);
+      sum_coef += temp_coef;
+    }
     // Criar media e desvio padrao do coef. angular
+    mean_coef = accumulate(coefs.begin(), coefs.end(), 0.0)/coefs.size();
+    for(vector<float>::iterator it=coefs.begin(); it!=coefs.end(); it++)
+        sum_coef += (*it - mean_coef) * (*it - mean_coef);
+    stdev_coef = sqrt( sum_coef/(coefs.size()-1) );
     // Checar quem esta dentro de um desvio padrao
-  }
+    for(int i=0; i<kptl.size(); i++){
+      if( (coefs[i] < (mean_coef-stdev_coef*rate)) || (coefs[i] > (mean_coef+stdev_coef*rate)) ){ // Se fora dos limites
+        kptl.erase(kptl.begin()+i);
+        kptr.erase(kptr.begin()+i);
+        matches.erase(matches.begin()+i);
+        coefs.erase(coefs.begin()+i);
+        i = i - 1; // Para nao pular um elemento
+      }
+    } // Fim do for
+  } // Fim do void
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /// Calculos a partir da matriz com teoria baseada nas fontes:
   /// http://planning.cs.uiuc.edu/node102.html#eqn:yprmat

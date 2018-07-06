@@ -67,8 +67,8 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          2000, 7, better_matches);
-
+                          52000, 3, better_matches);
+  return -1;
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
   cout << "Matriz fundamental F:\n" << F << endl;
