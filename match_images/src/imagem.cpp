@@ -6,6 +6,7 @@
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
+#include <opencv2/optflow.hpp>
 #include <opencv2/flann.hpp>
 #include <opencv2/stereo.hpp>
 
@@ -49,6 +50,11 @@ public:
     fs.release();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void undistort_image(Mat &pic, Mat camera_matrix, Mat coefs){
+    Mat temp; pic.copyTo(temp);
+    undistort(temp, pic, camera_matrix, coefs);
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void get_kpts_and_matches(Mat image_left, Mat image_right,
                             vector<Point2f> &keypoints_filt_left, vector<Point2f> &keypoints_filt_right,
                             Mat &descriptors_left, Mat &descriptors_right,
@@ -60,6 +66,9 @@ public:
 
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
 
+//      Ptr<ORB>  detector = ORB::create();
+//      detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
+//      detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
       Ptr<SURF> detector = SURF::create(min_hessian);
       detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
       detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
@@ -228,7 +237,7 @@ public:
       prm.at<float>(i, 2) = pr[i].y;
     }
   }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualize_cloud(Mat c){
     int pts = c.cols;
     cloud =  (PointCloud<PointT>::Ptr) new PointCloud<PointT>;

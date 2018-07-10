@@ -9,7 +9,7 @@
 
 int ordem = 0;
 std::string camera = "left";
-std::string nome   = "eng";
+std::string nome   = "trilho";
 void leftCallback(const sensor_msgs::ImageConstPtr& msg)
 {
   cv_bridge::CvImagePtr cv_ptr;
@@ -23,7 +23,7 @@ void leftCallback(const sensor_msgs::ImageConstPtr& msg)
     return;
   }
   ROS_INFO("Tamanho da imagem: %d %d", cv_ptr->image.rows, cv_ptr->image.cols);
-//  cv::imwrite("/home/mrs/pares_stereo/"+camera+"/"+nome+"_"+boost::lexical_cast<std::string>(ordem)+".jpg", cv_ptr->image);
+  cv::imwrite("/home/vinicius/imagens_distorcer/"+camera+"/"+nome+"_"+boost::lexical_cast<std::string>(ordem)+".jpg", cv_ptr->image);
   std::cout << "gravamos uma imagem da posicao " << ordem << std::endl;
   ordem++;
 }
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   image_transport::ImageTransport it(nh);
 
-  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_raw/compressed",  1000, leftCallback);
+  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_raw",  1000, leftCallback);
 //  image_transport::Subscriber sub_right = it.subscribe("/stereo/right/image_raw", 1000, rightCallback);
 
   ros::spin();
