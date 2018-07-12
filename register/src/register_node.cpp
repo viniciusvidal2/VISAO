@@ -64,7 +64,7 @@ typedef pcl::PointXYZRGB PointT;
 boost::shared_ptr<pcl::visualization::PCLVisualizer> vis_fim (new pcl::visualization::PCLVisualizer ("matched"));
 boost::shared_ptr<pcl::visualization::PCLVisualizer> vis_acc (new pcl::visualization::PCLVisualizer ("accumulated"));
 
-float lf = 0.04f; // Leaf size for voxel grid
+float lf = 0.2f; // Leaf size for voxel grid
 ros::Publisher pub;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool find_element(std::vector<int> v, int element){
@@ -185,13 +185,10 @@ void estimateKeypoints (const PointCloud<PointT>::Ptr src,
 
   switch (method){
   case 1: // Harris
-//    harris.setKSearch(k);
-//    harris.setRadius(0);
     harris.setNumberOfThreads(8);
     harris.setRefine(false);
-    harris.setThreshold(1e-8); // Test
-    //  harris.setNonMaxSupression(true);
-    ROS_INFO("PONTOS: [%d]\tnormais: [%d]", src->points.size(), src_normal->points.size());
+    harris.setThreshold(1e-9);
+
     harris.setRadius(radius_src);
     harris.setInputCloud(src);
     harris.setNormals(src_normal);
@@ -386,6 +383,66 @@ void remove_correspondences_bins_distance(CorrespondencesPtr correspondences, co
   ROS_INFO("Quantas correspondencias sobraram: %d", correspondences->size());
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void remove_correspondences_lines(PointCloud<PointXYZI>::Ptr src_kp, PointCloud<PointXYZI>::Ptr tgt_kp, CorrespondencesPtr correspondences, float ndev){
+  vector<double> ang_coefs_x(correspondences->size()), ang_coefs_y(correspondences->size()), ang_coefs_z(correspondences->size());
+  double dx, dy, dz, norm;
+
+  for(int i=0; i<correspondences->size(); i++){ // The unitary vectors between correspondences are calculated
+    dx = tgt_kp->points[correspondences->data()[i].index_match].x - src_kp->points[correspondences->data()[i].index_query].x;
+    dy = tgt_kp->points[correspondences->data()[i].index_match].y - src_kp->points[correspondences->data()[i].index_query].y;
+    dz = tgt_kp->points[correspondences->data()[i].index_match].z - src_kp->points[correspondences->data()[i].index_query].z;
+    norm = sqrt(dx*dx + dy*dy + dz*dz);
+    dx = dx/norm; dy = dy/norm; dz = dz/norm;
+    ang_coefs_x[i] = dx; ang_coefs_y[i] = dy; ang_coefs_z[i] = dz;
+  }
+
+  double stdev_x, stdev_y, stdev_z, mean_coef_x, mean_coef_y, mean_coef_z, sum_coef = 0;
+  /// Mean and standard coef. for X
+  mean_coef_x = accumulate(ang_coefs_x.begin(), ang_coefs_x.end(), 0.0)/ang_coefs_x.size();
+  for(vector<double>::iterator it=ang_coefs_x.begin(); it!=ang_coefs_x.end(); it++)
+      sum_coef += (*it - mean_coef_x) * (*it - mean_coef_x);
+  stdev_x = sqrt( sum_coef/(ang_coefs_x.size()-1) );
+  /// Mean and standard coef. for Y
+  sum_coef = 0;
+  mean_coef_y = accumulate(ang_coefs_y.begin(), ang_coefs_y.end(), 0.0)/ang_coefs_y.size();
+  for(vector<double>::iterator it=ang_coefs_y.begin(); it!=ang_coefs_y.end(); it++)
+      sum_coef += (*it - mean_coef_y) * (*it - mean_coef_y);
+  stdev_y = sqrt( sum_coef/(ang_coefs_y.size()-1) );
+  /// Mean and standard coef. for Z
+  sum_coef = 0;
+  mean_coef_z = accumulate(ang_coefs_z.begin(), ang_coefs_z.end(), 0.0)/ang_coefs_z.size();
+  for(vector<double>::iterator it=ang_coefs_z.begin(); it!=ang_coefs_z.end(); it++)
+      sum_coef += (*it - mean_coef_z) * (*it - mean_coef_z);
+  stdev_z = sqrt( sum_coef/(ang_coefs_z.size()-1) );
+  // Remove correspondence if one of the coeficients is not within the limits of ndev deviations
+  ROS_INFO("Medias: %.4f\t%.4f\t%.4f", mean_coef_x, mean_coef_y, mean_coef_z);
+  ROS_INFO("STDEV : %.4f\t%.4f\t%.4f", stdev_x    , stdev_y    , stdev_z    );
+//  ROS_INFO("Minimo X: %.4f\tMaximo X: %.4f", *min_element(ang_coefs_x.begin(), ang_coefs_x.end()), *max_element(ang_coefs_x.begin(), ang_coefs_x.end()));
+//  ROS_INFO("Minimo Y: %.4f\tMaximo Y: %.4f", *min_element(ang_coefs_y.begin(), ang_coefs_y.end()), *max_element(ang_coefs_y.begin(), ang_coefs_y.end()));
+//  ROS_INFO("Minimo Z: %.4f\tMaximo Z: %.4f", *min_element(ang_coefs_z.begin(), ang_coefs_z.end()), *max_element(ang_coefs_z.begin(), ang_coefs_z.end()));
+  ROS_INFO("Correspondencias antes: %d", correspondences->size());
+  Correspondences::iterator it = correspondences->begin();
+  for(int i=0; i<ang_coefs_x.size(); i++){
+    // If any of the values is outside the limits, remove the correspondence
+    if( ( (ang_coefs_x[i] < (mean_coef_x-stdev_x*ndev)) || (ang_coefs_x[i] > (mean_coef_x+stdev_x*ndev)) ) ||
+        ( (ang_coefs_y[i] < (mean_coef_y-stdev_y*ndev)) || (ang_coefs_y[i] > (mean_coef_y+stdev_y*ndev)) ) ||
+        ( (ang_coefs_z[i] < (mean_coef_z-stdev_z*ndev)) || (ang_coefs_z[i] > (mean_coef_z+stdev_z*ndev)) )    ){
+      correspondences->erase(it);
+    } else {
+//      ROS_INFO("Minimo X: %.4f\tX: %.4f\tMaximo X: %.4f", mean_coef_x-stdev_x*ndev, ang_coefs_x[i], mean_coef_x+stdev_x*ndev);
+//      ROS_INFO("Minimo Y: %.4f\tY: %.4f\tMaximo Y: %.4f", mean_coef_y-stdev_y*ndev, ang_coefs_y[i], mean_coef_y+stdev_y*ndev);
+//      ROS_INFO("Minimo Z: %.4f\tZ: %.4f\tMaximo Z: %.4f", mean_coef_z-stdev_z*ndev, ang_coefs_z[i], mean_coef_z+stdev_z*ndev);
+//      ROS_INFO("NORM: %.2f", sqrt(ang_coefs_x[i]*ang_coefs_x[i] + ang_coefs_y[i]*ang_coefs_y[i] + ang_coefs_z[i]*ang_coefs_z[i]));
+//      cout << endl;
+      it++;
+    }
+    // Security
+    if(it == correspondences->end())
+      break;
+  } // Fim do for
+  ROS_INFO("Correspondencias depois: %d\tQuantos desvios: %.2f", correspondences->size(), ndev);
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void check_on_weights(CorrespondencesPtr correspondences, int k_bests){
   if (correspondences->size() < k_bests) // Here there are less correspondences than what is required, break the function
     return;
@@ -442,17 +499,18 @@ void rejectBadCorrespondences (const CorrespondencesPtr all_correspondences,
                                CorrespondencesPtr remaining_correspondences)
 {
   if(all_correspondences->size() > 10){
-    remove_correspondences_bins_distance(all_correspondences, 3, 1);
 //    check_on_weights(all_correspondences, 10);
     CorrespondenceRejectorDistance rej;
     rej.setInputSource<PointXYZI>(keypoints_src);
     rej.setInputTarget<PointXYZI>(keypoints_tgt);
     float m = mean_correspondence_distance(all_correspondences);
-    rej.setMaximumDistance(m);
-    ROS_INFO("Cortando em %.2f", m);
+    rej.setMaximumDistance(m/2);
+    ROS_INFO("Cortando em %.2f", m/2);
     rej.setInputCorrespondences(all_correspondences);
     rej.getCorrespondences(*remaining_correspondences);
     ROS_INFO("Number of correspondences remaining after rejection distance: %d\n", remaining_correspondences->size ());
+    remove_correspondences_bins_distance(remaining_correspondences, 12, 2);
+    remove_correspondences_lines(keypoints_src, keypoints_tgt, remaining_correspondences, 1);
 
 //    *remaining_correspondences = *all_correspondences;
     pcl::registration::CorrespondenceRejectorSampleConsensus<PointXYZI> corr_rej_sac;
@@ -460,7 +518,6 @@ void rejectBadCorrespondences (const CorrespondencesPtr all_correspondences,
     corr_rej_sac.setInputTarget(keypoints_tgt);
     corr_rej_sac.setInlierThreshold(1e-9);
     corr_rej_sac.setMaximumIterations(1000);
-    //    corr_rej_sac.setRefineModel(false);
     corr_rej_sac.setInputCorrespondences(remaining_correspondences);
     corr_rej_sac.getCorrespondences(*remaining_correspondences);
     ROS_INFO("Number of correspondences remaining after rejection ransac: %d\n", remaining_correspondences->size ());
@@ -553,7 +610,7 @@ int main(int argc, char **argv)
   // Read clouds from storage
   PointCloud<PointT>::Ptr source_cloud (new PointCloud<PointT>());
   PointCloud<PointT>::Ptr target_cloud (new PointCloud<PointT>());
-  bool dragon = false;
+  bool dragon = true;
   if (dragon) {
     PointCloud<PointXYZ>::Ptr src_xyz (new PointCloud<PointXYZ> ());
     PointCloud<PointXYZ>::Ptr tgt_xyz (new PointCloud<PointXYZ> ());
@@ -565,7 +622,7 @@ int main(int argc, char **argv)
     color_cloud(target_cloud);
   } else {
     loadPLYFile<PointT>("/home/vinicius/register_ws/src/register/laboratorio_clouds/ptCloud_1.ply", *source_cloud);
-    loadPLYFile<PointT>("/home/vinicius/register_ws/src/register/laboratorio_clouds/ptCloud_2.ply" , *target_cloud);
+    loadPLYFile<PointT>("/home/vinicius/register_ws/src/register/laboratorio_clouds/ptCloud_2.ply", *target_cloud);
     std::vector<int> aux_indices;
     removeNaNFromPointCloud(*source_cloud, *source_cloud, aux_indices);
     removeNaNFromPointCloud(*target_cloud, *target_cloud, aux_indices);
@@ -574,8 +631,8 @@ int main(int argc, char **argv)
     passthrough(target_cloud, "z", 0, 50);
   }
   // Mess up with source to make it harder
-  Affine3f messrot = create_rotation_matrix(0, 0, 0);
-  Affine3f messt(Translation3f(Vector3f(3, 0, 0)));
+  Affine3f messrot = create_rotation_matrix(M_PI/6, M_PI/4, 0);
+  Affine3f messt(Translation3f(Vector3f(-100, 0, 0)));
   Matrix4f mess = (messt*messrot).matrix(); //messt.matrix();//messt*messrot).matrix();
   transformPointCloud(*source_cloud, *source_cloud, mess);
   std::cout << "\nA matriz usada para danificar a source: \n" << mess << std::endl;
@@ -594,15 +651,15 @@ int main(int argc, char **argv)
   // Calculate mean distance so we go with this data to the rest of the algorithm
   float mean_src = mean_points_distance(source_cloud);
   float mean_tgt = mean_points_distance(target_cloud);
-  int rate_kpt = 100, rate_des = 100; // To be used in the distance of the neighborhood
+  int rate_kpt = 20, rate_des = 30; // To be used in the distance of the neighborhood
   // Remove outliers from clouds
-//  remove_outlier(source_cloud, 7, 1);
-//  remove_outlier(target_cloud, 7, 1);
+  remove_outlier(source_cloud, 8, 1);
+  remove_outlier(target_cloud, 8, 1);
   // Calculate all possible clouds with normals
   PointCloud<Normal>::Ptr src_normal (new PointCloud<Normal>());
   PointCloud<Normal>::Ptr tgt_normal (new PointCloud<Normal>());
-  calculate_normals(source_cloud, 20, rate_kpt*mean_src, src_normal); // Use keypoints rate here as well, but number of neighbors is preferred for quality
-  calculate_normals(target_cloud, 20, rate_kpt*mean_tgt, tgt_normal);
+  calculate_normals(source_cloud, 10, rate_kpt*mean_src, src_normal); // Use keypoints rate here as well, but number of neighbors is preferred for quality
+  calculate_normals(target_cloud, 10, rate_kpt*mean_tgt, tgt_normal);
   // Calculate keypoints using the harris algorihtm
   PointCloud<PointXYZI>::Ptr src_kp (new PointCloud<PointXYZI> ());
   PointCloud<PointXYZI>::Ptr tgt_kp (new PointCloud<PointXYZI> ());
@@ -618,7 +675,6 @@ int main(int argc, char **argv)
   findCorrespondences(src_fpfh, tgt_fpfh, all_correspondences);
   // Reject bad ones
   CorrespondencesPtr good_correspondences (new Correspondences ());
-//  good_correspondences = all_correspondences; // No rejections to see where the problem is
   rejectBadCorrespondences(all_correspondences, src_kp, tgt_kp, good_correspondences);
   // Compute the transformation from the resultant correspondences
   Eigen::Matrix4f transformation;
@@ -646,7 +702,6 @@ int main(int argc, char **argv)
 
   // Spin just once ROS
   ros::spinOnce();
-//  ros::spin();
 
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
