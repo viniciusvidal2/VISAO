@@ -33,6 +33,10 @@ int main(int argc, char **argv)
   Imagem im;
   im.set_visualizar(true);
 
+  // Testar fator de escala
+  cout << "Fator de escala: " << im.scale_factor("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml", "/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/right.yaml", 0.10);
+  return -1;
+
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
   string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/wally/15.jpg";

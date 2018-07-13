@@ -16,7 +16,6 @@
 #include <opencv2/stereo.hpp>
 #include <opencv2/calib3d.hpp>
 
-//#include <mavlink/config.h>
 #include <mavros/mavros.h>
 #include <mavros/utils.h>
 #include <mavros/mavros.h>

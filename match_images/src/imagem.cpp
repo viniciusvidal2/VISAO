@@ -55,6 +55,33 @@ public:
     undistort(temp, pic, camera_matrix, coefs);
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  float scale_factor(string path_left, string path_right, float distance_bt_cameras){
+    Mat proj_left, proj_right, Kl, Kr;
+    FileStorage fl, fr;
+    fl.open(path_left , FileStorage::READ);
+    fl["projection_matrix"] >> proj_left;
+    fl["camera_matrix"] >> Kl;
+    fr.open(path_right, FileStorage::READ);
+    fr["projection_matrix"] >> proj_right;
+    fr["camera_matrix"] >> Kr;
+
+    // Calcular matrizes [R|t]
+    Mat rt_left(3, 4, CV_64F), rt_right(3, 4, CV_64F);
+    rt_left  = Kl.inv()*proj_left;
+    rt_right = Kr.inv()*proj_right;
+    cout << "Matriz Rt da esquerda:\n" << rt_left << "\nMatriz Rt da direita:\n" << rt_right << endl;
+    // Retirar translacao dali, em modulo para nao dar erro
+    vector<float> translation = { abs(rt_left.at<float>(0, 3)-rt_right.at<float>(0, 3)),
+                                  abs(rt_left.at<float>(1, 3)-rt_right.at<float>(1, 3)),
+                                  abs(rt_left.at<float>(2, 3)-rt_right.at<float>(2, 3)) };
+    // Garantir que estamos pegando o eixo que transladou mesmo
+    float t = *max_element(translation.begin(), translation.end());
+    // Aqui a escala da visao relativa monocular para o mundo real de acordo com a calibracao da camera
+    scale_to_real_world = distance_bt_cameras/t;
+
+    return scale_to_real_world;
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void get_kpts_and_matches(Mat image_left, Mat image_right,
                             vector<Point2f> &keypoints_filt_left, vector<Point2f> &keypoints_filt_right,
                             Mat &descriptors_left, Mat &descriptors_right,
@@ -66,9 +93,6 @@ public:
 
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
 
-//      Ptr<ORB>  detector = ORB::create();
-//      detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
-//      detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
       Ptr<SURF> detector = SURF::create(min_hessian);
       detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
       detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
@@ -308,4 +332,5 @@ private:
   int N; // Quantos quadrados no eixo -Y (rows)
   int w; // Largura dos quadrados no eixo  X
   int h; // Altura dos quadrados no eixo  -Y
+  float scale_to_real_world; // Escala da visao monocular para o mundo real
 };
