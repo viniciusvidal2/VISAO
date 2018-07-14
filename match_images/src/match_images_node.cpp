@@ -34,13 +34,14 @@ int main(int argc, char **argv)
   im.set_visualizar(true);
 
   // Testar fator de escala
-  cout << "Fator de escala: " << im.scale_factor("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml", "/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/right.yaml", 0.10);
-  return -1;
+  float scale_fact = im.scale_factor("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml",
+                                     "/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/right.yaml");
+//  return -1;
 
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
-  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/wally/15.jpg";
-  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/wally/16.jpg";
+  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/pares_stereo/left/labfull_0.jpg";
+  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/pares_stereo/right/labfull_0.jpg";
 
   image_left  = imread(path_left.c_str() , IMREAD_COLOR);
   image_right = imread(path_right.c_str(), IMREAD_COLOR);
@@ -71,65 +72,52 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          52000, 7, better_matches);
-  return -1;
+                          2000, 20, better_matches);
+//  return -1;
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
-  cout << "Matriz fundamental F:\n" << F << endl;
 
   // Corrigir os matches para diminuir o erro geometrico
-  vector<Point2f> keypoints_filt_left_new, keypoints_filt_right_new;
-  correctMatches(F, keypoints_filt_left, keypoints_filt_right, keypoints_filt_left_new, keypoints_filt_right_new);
+//  vector<Point2f> keypoints_filt_left_new, keypoints_filt_right_new;
+//  correctMatches(F, keypoints_filt_left, keypoints_filt_right, keypoints_filt_left_new, keypoints_filt_right_new);
 
   // Ler o arquivo de calibracao YAML na pasta calibracao
   Mat K, dist_coef, rect; // matriz intrinseca, coeficientes de distorcao e matriz de retificacao
   im.read_camera_calibration("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml", K, dist_coef, rect);
-  cout << "Camera matrix K:\n" << K << endl;
 
   // Matriz essencial
-//  Mat E = K.t() * F * K;
-  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, K, RANSAC, 0.999, 1e-4);
-  cout << "Matriz essencial E:\n" << E << endl;
+  Mat E1 = K.t() * F * K;
+//  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, K, RANSAC, 0.999, 1e-4);
+  cout << "Matriz essencial E :\n" << E1  << endl;
 
   // Descobrir a forma certa das quatro opcoes para matriz essencial
   Mat R, t, rod;
   int inliers;
-  inliers = recoverPose(E, keypoints_filt_left, keypoints_filt_right, K, R, t);
-  cout << "Matriz rotacao R:\n"    << R       << endl;
-  cout << "Matriz translacao t:\n" << t       << endl;
+  inliers = recoverPose(E1, keypoints_filt_left, keypoints_filt_right, K, R, t);
   cout << "Inliers:  "             << inliers << " de " << keypoints_filt_left.size() << endl;
 
   // Matriz de projecao
   Mat rt1, rt2, P1, P2;
   rt1 = (Mat1d(3, 4) << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0); // [I | 0]
   P1 = K*rt1; // Projecao inicial
-//  cout << "Matriz Projecao P1:\n"  << P1      << endl;
   hconcat(R, t, rt2); // Matriz de parametros extrinsecos 2
-//  cout << "Matriz extrinsecos:\n"  << rt2     << endl;
   P2 = K*rt2; // Matriz de projecao
-//  cout << "Matriz Projecao P2:\n"  << P2      << endl;
 
   // Obtendo angulos RPY a partir da matriz de rotacao
   // YAW   -> eixo Z saindo do plano da imagem; camera positivo anti-horario de giro; imagem positivo horario de giro.
   // PITCH -> eixo X apontando para a direita da imagem; camera positivo sentido horario da origem para ponta do eixo ("para baixo")
-//  float roll, pitch, yaw; // [rad]
-//  im.rpy_from_rotation(R, roll, pitch, yaw);
+
+  cout << endl << "X: " << scale_fact*t.at<double>(0, 0) << "\tY: " << scale_fact*t.at<double>(1, 0) << "\tZ: " << scale_fact*t.at<double>(2, 0) << endl;
   Rodrigues(R, rod);
   cout << endl << "roll: " << RAD2DEG(rod.at<double>(0, 0)) << "\t" << "pitch: " << RAD2DEG(rod.at<double>(1, 0)) <<
                   "\t" << "yaw: " << RAD2DEG(rod.at<double>(2, 0)) << endl;
-//  cout << endl << "roll: " << RAD2DEG(roll) << "\t" << "pitch: " << RAD2DEG(pitch) << "\t" << "yaw: " << RAD2DEG(yaw) << endl;
 
   // Triangulacao dos pontos - https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html#triangulatepoints
-  Mat points3d(Size(4, int(keypoints_filt_left_new.size())), CV_64FC1);
-  triangulatePoints(P1, P2, keypoints_filt_left_new, keypoints_filt_right_new, points3d);
+  Mat points3d(Size(4, int(keypoints_filt_left.size())), CV_64FC1);
+  triangulatePoints(P1, P2, keypoints_filt_left, keypoints_filt_right, points3d);
 
   // Visualizacao dos pontos 3D
-  im.visualize_cloud(points3d);
-
-  // Mapa de disparidade?
-//  Mat disparity;
-//  StereoMatcher::compute(image_left, image_right, disparity);
-
+//  im.visualize_cloud(points3d);
 
   ros::spinOnce();
 }
