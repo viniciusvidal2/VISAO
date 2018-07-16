@@ -41,7 +41,7 @@
 #include <eigen3/Eigen/Eigen>
 #include <math.h>
 
-#include "../../match_images/src/imagem.cpp"
+#include "../../libraries/imagem2.cpp"
 
 using namespace std;
 using namespace cv;
@@ -56,7 +56,10 @@ typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
 // Variaveis globais
 double roll, pitch, yaw, pe, pn, altura;
 double R2D = 180.0/M_PI;
-bool so_sensores = true;
+bool so_sensores = false, so_imagem = true;
+bool primeira_vez = true;
+Imagem im;
+Pose pose;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Matematica retirada de:
@@ -118,6 +121,35 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
   cout << "pn: "   << pn   << "\tpe: "    << pe    << "\talt: " << altura << endl;
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+void so_imagem2(const ImageConstPtr msg){
+  // Imagem vinda da mensagem
+  cv_bridge::CvImagePtr imagemptr;
+  imagemptr = cv_bridge::toCvCopy(msg, image_encodings::BGR8);
+  if(primeira_vez){
+    // Calibracao e fator de escala
+    string path_left = "calibracao, esquerda";
+    string path_right = "calibracao direita";
+    im.read_camera_calibration(path_left.c_str());
+    im.scale_factor(path_left.c_str(), path_right.c_str());
+    // Inicia as imagens
+    im.set_image_current(imagemptr->image);
+    im.set_image_previous(imagemptr->image);
+    // Ajustar bins para filtrar correspondencias
+    im.set_quadrados(imagemptr->image, 10, 10, false);
+    // Iniciar variaveis no geral
+    im.init();
+    pose.x     = 0; pose.y      = 0; pose.z    = 0;
+    pose.roll  = 0; pose.pitch  = 0; pose.yaw  = 0;
+    pose.droll = 0; pose.dpitch = 0; pose.dyaw = 0;
+    im.set_pose(pose);
+    // Ja esta tudo pronto para a proxima!
+    primeira_vez = false;
+
+  } else {
+
+  }
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "ler_tudo");
@@ -144,17 +176,24 @@ int main(int argc, char **argv)
     ROS_INFO("Veiculo armado para salvar origem.");
   else
     ROS_INFO("Nao foi possivel armar o veiculo.");
-  //  // Subscribers para ler sincronizadas as informacoes
-  if(!so_sensores){
+
+  // Visualizar ou nao as imagens da camera
+  im.set_visualizar(false);
+
+  // Subscribers para ler sincronizadas as informacoes
+  if(!so_sensores && !so_imagem){
     message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
     message_filters::Subscriber<Image>    subima(nh, "/stereo/left/image_rect"      , 100);
-  // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
+    // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
     Synchronizer<syncPolicy> sync(syncPolicy(100), subodo, subima);
     sync.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
   }
   // Subscriber para ler so a placa com a mensagem de pose
   if(so_sensores)
-    ros::Subscriber subodo = nh.subscribe("/mavros/global_position/local", 1000, so_placa);
+    ros::Subscriber subodo_ = nh.subscribe("/mavros/global_position/local", 1000, so_placa);
+  // Subscriber para ler so o topico de imagens
+  if(so_imagem)
+    ros::Subscriber subima_ = nh.subscribe("nomedotopicoaqui", 1000, so_imagem2);
 
   ros::spin();
 

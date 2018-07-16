@@ -37,6 +37,16 @@ using namespace std;
 
 typedef PointXYZRGB PointT;
 
+// Estrutura para simplificar e passar para filtro
+struct Pose{
+  double x;
+  double y;
+  double z;
+  double roll;
+  double pitch;
+  double yaw;
+} ;
+
 class Imagem
 {
 public:
@@ -252,15 +262,6 @@ public:
     }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void vector2mat(vector<Point2f> pl, vector<Point2f> pr, Mat &plm, Mat &prm){
-    for(int i=0; i<pl.size(); i++){ // Os vetores tendem a ser do mesmo tamanho sempre, sao filtrados la atras
-      plm.at<float>(i, 1) = pl[i].x;
-      plm.at<float>(i, 2) = pl[i].y;
-      prm.at<float>(i, 1) = pr[i].x;
-      prm.at<float>(i, 2) = pr[i].y;
-    }
-  }
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualize_cloud(Mat c){
     int pts = c.cols;
     cloud =  (PointCloud<PointT>::Ptr) new PointCloud<PointT>;
@@ -303,9 +304,9 @@ public:
           line(pic, Point(i, 0), Point(i, pic.rows), Scalar(255), 20, 7, 0);
         for(int j=0; j<pic.rows; j=j+h)
           line(pic, Point(0, j), Point(pic.cols, j), Scalar(255), 20, 7, 0);
-        putText(pic, "Se bom aperte s", cvPoint(pic.cols/10, pic.rows/4),  FONT_HERSHEY_COMPLEX, 10,
+        putText(pic, "Se bom aperte s", cvPoint(pic.cols/10,   pic.rows/4), FONT_HERSHEY_COMPLEX, 10,
                 cvScalar(0, 250, 0), 10, CV_AA);
-        putText(pic, "senao aperte n", cvPoint(pic.cols/10, 3*pic.rows/4), FONT_HERSHEY_COMPLEX, 10,
+        putText(pic, "senao aperte n ", cvPoint(pic.cols/10, 3*pic.rows/4), FONT_HERSHEY_COMPLEX, 10,
                 cvScalar(0, 250, 0), 10, CV_AA);
 
         namedWindow("testando", WINDOW_GUI_NORMAL);
@@ -326,6 +327,10 @@ public:
 
 private:
   bool visualizar;
+  Mat camera_matrix, dist_coef, rect; // Vindos do arquivo de calibracao
+  Mat previous_image, current_image; // Imagem anterior e atual para comparar
+  Mat rt1, rt2, P1, P2;
+  Pose pose;
   PointCloud<PointT>::Ptr cloud;
   int M; // Quantos quadrados no eixo  X (columns)
   int N; // Quantos quadrados no eixo -Y (rows)
