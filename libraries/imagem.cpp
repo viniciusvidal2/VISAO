@@ -143,6 +143,7 @@ public:
       filter_lines(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
 
       ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      ROS_INFO("Threshold para descritor: %d", min_hessian);
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
         min_hessian = 0.7*min_hessian;
@@ -158,7 +159,7 @@ public:
 
     } // Fim do while
 
-    if (visualizar){
+    if (true){
       Mat img_matches, img_matches_disp;
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
@@ -195,7 +196,7 @@ public:
   void filter_lines(Mat pic, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
     // Keypoints ja correspondem um a um nesse estagio.
     double mean_coef, sum_coef = 0, stdev_coef;
-    float  rate = 0.5; // Quantos desvios padroes vao passar
+    float  rate = 1.0f; // Quantos desvios padroes vao passar
     vector<float> coefs(kptl.size());
     for(int i=0; i<kptl.size(); i++){
       // Guardar coordenadas dos pontos

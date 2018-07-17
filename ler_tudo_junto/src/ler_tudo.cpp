@@ -59,7 +59,7 @@ double R2D = 180.0/M_PI;
 bool so_sensores = false, so_imagem = true;
 bool primeira_vez = true;
 Imagem im;
-Pose pose;
+Pose_atual pose;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Matematica retirada de:
@@ -125,7 +125,9 @@ void so_imagem2(const ImageConstPtr msg){
   // Imagem vinda da mensagem
   cv_bridge::CvImagePtr imagemptr;
   imagemptr = cv_bridge::toCvCopy(msg, image_encodings::BGR8);
+  // Aqui o pipeline decide entre primeira vez, para ajustar tudo, ou nao
   if(primeira_vez){
+
     // Calibracao e fator de escala
     string path_left = "calibracao, esquerda";
     string path_right = "calibracao direita";
@@ -139,13 +141,14 @@ void so_imagem2(const ImageConstPtr msg){
     // Iniciar variaveis no geral
     im.init();
     pose.x     = 0; pose.y      = 0; pose.z    = 0;
+    pose.dx    = 0; pose.dy     = 0; pose.dz   = 0;
     pose.roll  = 0; pose.pitch  = 0; pose.yaw  = 0;
     pose.droll = 0; pose.dpitch = 0; pose.dyaw = 0;
     im.set_pose(pose);
     // Ja esta tudo pronto para a proxima!
     primeira_vez = false;
 
-  } else {
+  } else { // Aqui temos a acao com a imagem!
 
   }
 }

@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   // Objeto da classe que trabalha o pipeline da imagem, somente .cpp, porque ficou de viadagem
   Imagem im;
-  im.set_visualizar(true);
+  im.set_visualizar(false);
 
   // Testar fator de escala
   float scale_fact = im.scale_factor("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml",
@@ -40,8 +40,8 @@ int main(int argc, char **argv)
 
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
-  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/pares_stereo/left/labfull_0.jpg";
-  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/pares_stereo/right/labfull_0.jpg";
+  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/x.jpg";
+  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/xpraesquerda.jpg";
 
   image_left  = imread(path_left.c_str() , IMREAD_COLOR);
   image_right = imread(path_right.c_str(), IMREAD_COLOR);
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  im.set_quadrados(image_left, 10, 10, false);
+  im.set_quadrados(image_left, 3, 3, false);
 
 //  // Rotacionar a imagem de sacanagem
 //  double angle = 30;
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          2000, 20, better_matches);
+                          30000, 20, better_matches);
 //  return -1;
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
@@ -86,14 +86,14 @@ int main(int argc, char **argv)
   im.read_camera_calibration("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml", K, dist_coef, rect);
 
   // Matriz essencial
-  Mat E1 = K.t() * F * K;
-//  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, K, RANSAC, 0.999, 1e-4);
-  cout << "Matriz essencial E :\n" << E1  << endl;
+//  Mat E = K.t() * F * K;
+  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, K, RANSAC, 0.999, 1e-4);
+  cout << "Matriz essencial E :\n" << E  << endl;
 
   // Descobrir a forma certa das quatro opcoes para matriz essencial
   Mat R, t, rod;
   int inliers;
-  inliers = recoverPose(E1, keypoints_filt_left, keypoints_filt_right, K, R, t);
+  inliers = recoverPose(E, keypoints_filt_left, keypoints_filt_right, K, R, t);
   cout << "Inliers:  "             << inliers << " de " << keypoints_filt_left.size() << endl;
 
   // Matriz de projecao
