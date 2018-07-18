@@ -382,9 +382,9 @@ public:
     ///   X <--o Z           Y <--x X
     ///
     /// Sendo assim, as leituras dos angulos de rotacao e da translacao vao ser alteradas como esta abaixo:
-    ///  X[0] -> Y
-    ///  Y[1] -> Z
-    /// -Z[2] -> X
+    ///  X[0] -> Y           roll:  rod[2], horario       , antihorario
+    ///  Y[1] -> Z           Pitch: rod[0], para cima -   , para baixo +
+    /// -Z[2] -> X           Yaw:   rod[1], para direita -, para esquerda +
     ///
     // Posicao e acumulada!! -- FALTA AJUSTAR OS FRAMES
     pose.dx = -scale_to_real_world*t.at<double>(2, 0);
@@ -393,10 +393,10 @@ public:
     pose.x += -scale_to_real_world*t.at<double>(2, 0);
     pose.y +=  scale_to_real_world*t.at<double>(0, 0); // [m]
     pose.z +=  scale_to_real_world*t.at<double>(1, 0);
-    // Diferencas entre angulos -- FALTA AJUSTAR OS FRAMES
-    pose.droll  = rad2deg(rod.at<double>(0, 0));
-    pose.dpitch = rad2deg(rod.at<double>(1, 0)); // [DEG]
-    pose.dyaw   = rad2deg(rod.at<double>(2, 0));
+    // Diferencas entre angulos -- FALTA AJUSTAR OS SINAIS
+    pose.droll  = rad2deg(rod.at<double>(2, 0));
+    pose.dpitch = rad2deg(rod.at<double>(0, 0)); // [DEG]
+    pose.dyaw   = rad2deg(rod.at<double>(1, 0));
     // Angulos atuais acumulados - somar com os anteriores
     pose.roll  += pose.droll;
     pose.pitch += pose.dpitch; // [DEG]

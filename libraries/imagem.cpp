@@ -94,16 +94,16 @@ public:
                             Mat &descriptors_left, Mat &descriptors_right,
                             double min_hessian, int min_matches, vector<DMatch> &better_matches){
 
-//    FlannBasedMatcher matcher;
-    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_HAMMING);
+    FlannBasedMatcher matcher;
+//    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_HAMMING);
     vector<KeyPoint> keypoints_left, keypoints_right;
     vector<DMatch> matches;
 
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
 
-//      Ptr<SURF> detector = SURF::create(min_hessian);
-      Ptr<AKAZE> detector = AKAZE::create();
-      detector->setThreshold(min_hessian);
+      Ptr<SURF> detector = SURF::create(min_hessian);
+//      Ptr<AKAZE> detector = AKAZE::create();
+//      detector->setThreshold(min_hessian);
       detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
       detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
 
@@ -120,7 +120,7 @@ public:
 
       // Fazer match de features
       if (!descriptors_left.empty() && !descriptors_right.empty())
-        matcher->match(descriptors_left, descriptors_right, matches);
+        matcher.match(descriptors_left, descriptors_right, matches);
 
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
@@ -129,7 +129,7 @@ public:
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 400*min_dist;
+      float thresh_dist = 7*min_dist;
 
       for(int i = 0; i < matches.size(); i++){
         if (matches[i].distance < thresh_dist){ // Aqui crio matches novo e vetor dos pontos dos keypoints ORGANIZADOS,
@@ -138,13 +138,15 @@ public:
           keypoints_filt_right.push_back(keypoints_right[matches[i].trainIdx].pt);
         }
       }
+      ROS_INFO("Antes dos filtros              %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Filtrando por bins
       filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
       // Filtrando por coeficiente angular
-      filter_lines(image_left, 0.5f, keypoints_filt_left, keypoints_filt_right, better_matches);
+      ROS_INFO("Apos filtro bins               %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      filter_lines(image_left, 1.0f, keypoints_filt_left, keypoints_filt_right, better_matches);
 
       ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
-      ROS_INFO("Threshold para descritor: %.2f", min_hessian*10000);
+      ROS_INFO("Threshold para descritor: %.2f", min_hessian);
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
         min_hessian = 0.7*min_hessian;
@@ -165,7 +167,7 @@ public:
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-      resize(img_matches, img_matches_disp, Size(img_matches.cols/2, img_matches.rows/2));
+      resize(img_matches, img_matches_disp, Size(img_matches.cols/6, img_matches.rows/6));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
       imshow("All Matches", img_matches_disp);
       waitKey(0);
@@ -210,7 +212,7 @@ public:
     for(vector<float>::iterator it=coefs.begin(); it!=coefs.end(); it++)
         sum_coef += (*it - mean_coef) * (*it - mean_coef);
     stdev_coef = sqrt( sum_coef/(coefs.size()-1) );
-    cout << "MEDIA: " << mean_coef << "\tSTD_DEV: " << stdev_coef << endl;
+//    cout << "MEDIA: " << mean_coef << "\tSTD_DEV: " << stdev_coef << endl;
     // Checar quem esta dentro de um desvio padrao
     for(int i=0; i<kptl.size(); i++){
       if( (coefs[i] < (mean_coef-stdev_coef*rate)) || (coefs[i] > (mean_coef+stdev_coef*rate)) ){ // Se fora dos limites
