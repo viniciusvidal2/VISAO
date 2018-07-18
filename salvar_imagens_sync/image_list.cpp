@@ -9,7 +9,7 @@
 
 int ordem = 0;
 std::string camera = "right";
-std::string nome   = "labfull";
+std::string nome   = "pitch";
 void leftCallback(const sensor_msgs::ImageConstPtr& msg)
 {
   cv_bridge::CvImagePtr cv_ptr;
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   image_transport::ImageTransport it(nh);
 
-  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_rect",  1000, leftCallback);
+  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_rect_color",  1000, leftCallback);
 //  image_transport::Subscriber sub_right = it.subscribe("/stereo/right/image_raw", 1000, rightCallback);
 
   ros::spin();

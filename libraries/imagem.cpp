@@ -92,17 +92,18 @@ public:
   void get_kpts_and_matches(Mat image_left, Mat image_right,
                             vector<Point2f> &keypoints_filt_left, vector<Point2f> &keypoints_filt_right,
                             Mat &descriptors_left, Mat &descriptors_right,
-                            int min_hessian, int min_matches, vector<DMatch> &better_matches){
+                            double min_hessian, int min_matches, vector<DMatch> &better_matches){
 
-    FlannBasedMatcher matcher;
-//    BFMatcher matcher(NORM_HAMMING);
+//    FlannBasedMatcher matcher;
+    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_HAMMING);
     vector<KeyPoint> keypoints_left, keypoints_right;
     vector<DMatch> matches;
 
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
 
-      Ptr<SURF> detector = SURF::create(min_hessian);
-//      Ptr<AKAZE> detector = AKAZE::create(AKAZE::DESCRIPTOR_MLDB, 0, 3, min_hessian, 4, 4, KAZE::DIFF_PM_G2);
+//      Ptr<SURF> detector = SURF::create(min_hessian);
+      Ptr<AKAZE> detector = AKAZE::create();
+      detector->setThreshold(min_hessian);
       detector->detectAndCompute(image_left , Mat(), keypoints_left , descriptors_left );
       detector->detectAndCompute(image_right, Mat(), keypoints_right, descriptors_right);
 
@@ -119,7 +120,7 @@ public:
 
       // Fazer match de features
       if (!descriptors_left.empty() && !descriptors_right.empty())
-        matcher.match(descriptors_left, descriptors_right, matches);
+        matcher->match(descriptors_left, descriptors_right, matches);
 
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
@@ -128,7 +129,7 @@ public:
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 3*min_dist;
+      float thresh_dist = 400*min_dist;
 
       for(int i = 0; i < matches.size(); i++){
         if (matches[i].distance < thresh_dist){ // Aqui crio matches novo e vetor dos pontos dos keypoints ORGANIZADOS,
@@ -140,10 +141,10 @@ public:
       // Filtrando por bins
       filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
       // Filtrando por coeficiente angular
-      filter_lines(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
+      filter_lines(image_left, 0.5f, keypoints_filt_left, keypoints_filt_right, better_matches);
 
       ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
-      ROS_INFO("Threshold para descritor: %d", min_hessian);
+      ROS_INFO("Threshold para descritor: %.2f", min_hessian*10000);
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
         min_hessian = 0.7*min_hessian;
@@ -164,7 +165,7 @@ public:
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-      resize(img_matches, img_matches_disp, Size(img_matches.cols/4, img_matches.rows/4));
+      resize(img_matches, img_matches_disp, Size(img_matches.cols/2, img_matches.rows/2));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
       imshow("All Matches", img_matches_disp);
       waitKey(0);
@@ -193,10 +194,9 @@ public:
     } // Fim do for
   } // Fim do void
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void filter_lines(Mat pic, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
+  void filter_lines(Mat pic, float rate, vector<Point2f> &kptl, vector<Point2f> &kptr, vector<DMatch> &matches){
     // Keypoints ja correspondem um a um nesse estagio.
     double mean_coef, sum_coef = 0, stdev_coef;
-    float  rate = 1.0f; // Quantos desvios padroes vao passar
     vector<float> coefs(kptl.size());
     for(int i=0; i<kptl.size(); i++){
       // Guardar coordenadas dos pontos

@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   // Objeto da classe que trabalha o pipeline da imagem, somente .cpp, porque ficou de viadagem
   Imagem im;
-  im.set_visualizar(false);
+  im.set_visualizar(true);
 
   // Testar fator de escala
   float scale_fact = im.scale_factor("/home/vinicius/visao_ws/src/VISAO/match_images/calibracao/left.yaml",
@@ -40,8 +40,8 @@ int main(int argc, char **argv)
 
   // Declarando as imagens que esta lendo
   Mat image_left, image_right;
-  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/x.jpg";
-  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/xpraesquerda.jpg";
+  string path_left  = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/yaw_4.jpg";
+  string path_right = "/home/vinicius/visao_ws/src/VISAO/match_images/datasets/super/yaw_7.jpg";
 
   image_left  = imread(path_left.c_str() , IMREAD_COLOR);
   image_right = imread(path_right.c_str(), IMREAD_COLOR);
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  im.set_quadrados(image_left, 3, 3, false);
+  im.set_quadrados(image_left, 2, 2, true);
 
 //  // Rotacionar a imagem de sacanagem
 //  double angle = 30;
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
   vector<DMatch> better_matches;
   im.get_kpts_and_matches(image_left, image_right,
                           keypoints_filt_left, keypoints_filt_right, descriptors_left, descriptors_right,
-                          30000, 20, better_matches);
+                          3e-2, 19, better_matches);
 //  return -1;
   // Matriz fundamental entre as fotos
   Mat F = findFundamentalMat(keypoints_filt_left, keypoints_filt_right);
