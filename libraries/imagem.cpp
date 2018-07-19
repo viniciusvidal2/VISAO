@@ -29,6 +29,8 @@
 
 #include <ros/ros.h>
 
+#include "pose.h"
+
 using namespace pcl;
 using namespace pcl::visualization;
 using namespace cv;
@@ -38,7 +40,7 @@ using namespace std;
 typedef PointXYZRGB PointT;
 
 // Estrutura para simplificar e passar para filtro
-struct Pose{
+struct Pose_old{
   double x;
   double y;
   double z;
@@ -333,7 +335,7 @@ private:
   Mat camera_matrix, dist_coef, rect; // Vindos do arquivo de calibracao
   Mat previous_image, current_image; // Imagem anterior e atual para comparar
   Mat rt1, rt2, P1, P2;
-  Pose pose;
+  Pose_old pose;
   PointCloud<PointT>::Ptr cloud;
   int M; // Quantos quadrados no eixo  X (columns)
   int N; // Quantos quadrados no eixo -Y (rows)

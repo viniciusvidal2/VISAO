@@ -41,7 +41,10 @@
 #include <eigen3/Eigen/Eigen>
 #include <math.h>
 
+// Nossos includes
 #include "../../libraries/imagem2.cpp"
+#include "../../libraries/placa.cpp"
+#include "../../libraries/pose.h"
 
 using namespace std;
 using namespace cv;
@@ -53,13 +56,28 @@ using namespace sensor_msgs;
 
 typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
 
-// Variaveis globais
-double roll, pitch, yaw, pe, pn, altura;
-double R2D = 180.0/M_PI;
-bool so_sensores = false, so_imagem = true;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Variaveis globais
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+double roll, pitch, yaw; // Leituras de angulos da placa [RAD]
+double R2D = 180.0/M_PI; // Conversao
+bool so_sensores = true, so_imagem = false; // Flags de controle
 bool primeira_vez = true;
-Imagem im;
-Pose_atual pose;
+
+ros::Subscriber subodo_, subima_; // Subscribers para dados em separado
+
+Imagem2 im; // Objeto de tratamento da imagem
+
+Placa placa; // Objeto de tratamento da placa
+
+Pose_atual pose_leitura_placa; // Poses referentes a placa
+Pose_atual pose_filtro_placa;
+Pose_atual pose_leitura_imagem; // Poses referentes a imagem
+Pose_atual pose_filtro_imagem;
+
+int contador_placa, amostras; // Conta quantas iteracoes passam que dai salvamos ou nao
+string caminho_atual;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Matematica retirada de:
@@ -84,6 +102,13 @@ void toEulerAngle(Quaternion q, double& roll, double& pitch, double& yaw)
   yaw = atan2(siny, cosy);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+void init_pose(Pose_atual &_pose){
+  _pose.x     = 0; _pose.y      = 0; _pose.z    = 0;
+  _pose.dx    = 0; _pose.dy     = 0; _pose.dz   = 0;
+  _pose.roll  = 0; _pose.pitch  = 0; _pose.yaw  = 0;
+  _pose.droll = 0; _pose.dpitch = 0; _pose.dyaw = 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 void informacoes_sincronizadas(const OdometryConstPtr& odo, const ImageConstPtr& im){
   /// Armazenar os dados todos
   // Angulos atuais [RAD]
@@ -98,7 +123,7 @@ void informacoes_sincronizadas(const OdometryConstPtr& odo, const ImageConstPtr&
   // PN: Posicao norte, Y da mensagem, cresce para norte do mapa
   // PE: Posicao leste, X da mensagem, cresce para leste do mapa
   // PZ: Posicao vertical, Z da mensagem, cresce para cima
-  pn = odo->pose.pose.position.y; pe = odo->pose.pose.position.x; altura = odo->pose.pose.position.z;
+
   // Imagem
   cv_bridge::CvImagePtr imagemptr;
   imagemptr = cv_bridge::toCvCopy(im, image_encodings::BGR8);
@@ -111,24 +136,53 @@ void informacoes_sincronizadas(const OdometryConstPtr& odo, const ImageConstPtr&
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 void so_placa(const nav_msgs::OdometryConstPtr& odo){
   /// Armazenar os dados todos
-  // Angulos atuais
+  /// Angulos atuais
+  /// Angulos atuais [RAD]
+  /// YAW:   eixo Z para cima da placa, sentido anti-horario positivo, 0 para leste, 180 em oeste, de -180 a 180
+  /// ROLL:  eixo X para a frente da placa, sentido horario e positivo, -180 a 180, 0 na horizontal
+  /// PITCH: eixo Y para a esquerda da placa, sentido mao direita, bico pra baixo positivo, empinada negativa, -90 a 90 (nao da uma volta)
   tf::Quaternion q(odo->pose.pose.orientation.x, odo->pose.pose.orientation.y, odo->pose.pose.orientation.z, odo->pose.pose.orientation.w);
   tf::Matrix3x3 m(q);
   m.getRPY(roll, pitch, yaw);
-  // Posicao
-  pn = odo->pose.pose.position.y; pe = odo->pose.pose.position.x; altura = odo->pose.pose.position.z;
+  pose_leitura_placa.roll = rad2deg(roll); pose_leitura_placa.pitch = rad2deg(pitch); pose_leitura_placa.yaw = rad2deg(yaw); // [DEG]
+  /// Posicao
+  /// Posicao ENU [m]
+  /// PN: Posicao norte, Y da mensagem, cresce para norte do mapa
+  /// PE: Posicao leste, X da mensagem, cresce para leste do mapa
+  /// PZ: Posicao vertical, Z da mensagem, cresce para cima
+  pose_leitura_placa.y = odo->pose.pose.position.y;
+  pose_leitura_placa.x = odo->pose.pose.position.x;
+  pose_leitura_placa.z = odo->pose.pose.position.z;
   // Print para averiguar
-  cout << "roll: " << R2D*roll << "\tpitch: " << R2D*pitch << "\tyaw: " << R2D*yaw << endl;
-  cout << "pn:   " << pn       << "\tpe:    " << pe        << "\talt: " << altura  << endl;
+//  cout << "roll: " << R2D*roll             << "\tpitch: " << R2D*pitch            << "\tyaw: " << R2D*yaw              << endl;
+//  cout << "pn:   " << pose_leitura_placa.y << "\tpe:    " << pose_leitura_placa.x << "\talt: " << pose_leitura_placa.z << endl;
   /// Pipeline
   if(primeira_vez){
     // Iniciar tudo
+    placa.init();
     // Preencher a previous com o que vier
+    placa.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS
+    // Vamos salvar a nuvem com o caminho?
+    placa.set_salvar_nuvem(true);
+    // Ja foi a primeira vez, virar o flag
+    primeira_vez = false;
   } else {
-    // Setar a pose atual com as leituras
-    // Calcular com o pipeline e pegar a pose com diferencas
-    // Salvar a nuvem apos tantas iteracoes?
-  }
+    if(contador_placa <= amostras){
+      cout << "roll: " << R2D*roll             << "\tpitch: " << R2D*pitch            << "\tyaw: " << R2D*yaw              << endl;
+      cout << "pn:   " << pose_leitura_placa.y << "\tpe:    " << pose_leitura_placa.x << "\talt: " << pose_leitura_placa.z << endl;
+      // Setar a pose atual com as leituras
+      placa.set_pose(pose_leitura_placa, 1); // Salvando na leitura atual
+      // Calcular com o pipeline e pegar a pose com diferencas
+      placa.process_and_return(pose_filtro_placa);
+      // Atualiza contador
+      contador_placa++;
+    } else {
+      // Salvar a nuvem apos tantas iteracoes?
+      string nome = "caminho";
+      placa.salvar_nuvem(nome);
+      ros::shutdown();
+    }
+  } // Fim do pipeline
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 void so_imagem2(const ImageConstPtr msg){
@@ -150,11 +204,7 @@ void so_imagem2(const ImageConstPtr msg){
     im.set_quadrados(imagemptr->image, 10, 10, false);
     // Iniciar variaveis no geral
     im.init();
-    pose.x     = 0; pose.y      = 0; pose.z    = 0;
-    pose.dx    = 0; pose.dy     = 0; pose.dz   = 0;
-    pose.roll  = 0; pose.pitch  = 0; pose.yaw  = 0;
-    pose.droll = 0; pose.dpitch = 0; pose.dyaw = 0;
-    im.set_pose(pose);
+    im.set_pose(pose_leitura_imagem);
     // Ja esta tudo pronto para a proxima!
     primeira_vez = false;
 
@@ -178,20 +228,28 @@ int main(int argc, char **argv)
   rate.request.message_rate = 10; // X Hz das mensagens que vem
   rate.request.on_off = 1; // Nao sei
   if(srv.call(rate))
-    ROS_INFO("Taxado mavros mudada para %d Hz", rate.request.message_rate);
+    ROS_INFO("Taxa do mavros mudada para %d Hz", rate.request.message_rate);
   else
     ROS_INFO("Nao pode chamar o servico, taxa nao mudada.");
   // Armando o veiculo nesse caso
   ros::ServiceClient armar_srv = nh.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
   mavros_msgs::CommandBool armar;
   armar.request.value = true;
-  if(armar_srv.call(armar))
-    ROS_INFO("Veiculo armado para salvar origem.");
-  else
-    ROS_INFO("Nao foi possivel armar o veiculo.");
+//  if(armar_srv.call(armar))
+//    ROS_INFO("Veiculo armado para salvar origem.");
+//  else
+//    ROS_INFO("Nao foi possivel armar o veiculo.");
 
   // Visualizar ou nao as imagens da camera
   im.set_visualizar(false);
+  // Contador de leituras da placa
+  contador_placa = 0; amostras = 10000;
+
+  // Iniciar poses de leitura para placa e imagem
+  init_pose(pose_leitura_placa);
+  init_pose(pose_filtro_placa);
+  init_pose(pose_leitura_imagem);
+  init_pose(pose_filtro_imagem);
 
   // Subscribers para ler sincronizadas as informacoes
   if(!so_sensores && !so_imagem){
@@ -203,10 +261,10 @@ int main(int argc, char **argv)
   }
   // Subscriber para ler so a placa com a mensagem de pose
   if(so_sensores)
-    ros::Subscriber subodo_ = nh.subscribe("/mavros/global_position/local", 1000, so_placa);
+    subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa);
   // Subscriber para ler so o topico de imagens
   if(so_imagem)
-    ros::Subscriber subima_ = nh.subscribe("nomedotopicoaqui", 1000, so_imagem2);
+    subima_ = nh.subscribe("nomedotopicoaqui", 100, so_imagem2);
 
   ros::spin();
 

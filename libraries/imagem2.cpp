@@ -29,6 +29,8 @@
 
 #include <ros/ros.h>
 
+#include "pose.h"
+
 using namespace pcl;
 using namespace pcl::visualization;
 using namespace cv;
@@ -37,23 +39,7 @@ using namespace std;
 
 typedef PointXYZRGB PointT;
 
-// Estrutura para simplificar e passar para filtro
-struct Pose_atual{
-  double x;
-  double y;      // [m]
-  double z;
-  double dx;
-  double dy;     // [m]
-  double dz;
-  double roll;
-  double pitch;  // [DEG]
-  double yaw;
-  double droll;
-  double dpitch; // diferenca de angulos [DEG]
-  double dyaw;
-} ;
-
-class Imagem
+class Imagem2
 {
 public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -377,22 +363,22 @@ public:
     /// Descricao dos frames da camera e da placa para conversao correta, como se estivesse olhando para a
     /// parte traseira de ambas:
     ///     CAMERA              PLACA
-    ///        ^ Y                ^ Z
+    ///        ^ Y                ^ Z (alt)
     ///        |                  |
-    ///   X <--o Z           Y <--x X
+    ///   X <--o Z         (Pn) Y x--> X (Pe)
     ///
     /// Sendo assim, as leituras dos angulos de rotacao e da translacao vao ser alteradas como esta abaixo:
-    ///  X[0] -> Y           roll:  rod[2], horario      -, antihorario   +    INVERTER SENTIDO para placa!
-    ///  Y[1] -> Z           Pitch: rod[0], para cima    -, para baixo    +    Sentido OK
-    /// -Z[2] -> X           Yaw:   rod[1], para direita -, para esquerda +    Sentido OK
+    /// X = -X[0]         roll:  rod[2], horario      -, antihorario   +    INVERTER SENTIDO para placa!
+    /// Z =  Y[1]         Pitch: rod[0], para cima    -, para baixo    +    Sentido OK
+    /// Y = -Z[2]         Yaw:   rod[1], para direita -, para esquerda +    Sentido OK
     ///
     // Posicao e acumulada!!
-    pose.dx = -scale_to_real_world*t.at<double>(2, 0);
-    pose.dy =  scale_to_real_world*t.at<double>(0, 0); // [m]
+    pose.dx = -scale_to_real_world*t.at<double>(0, 0);
+    pose.dy = -scale_to_real_world*t.at<double>(2, 0); // [m]
     pose.dz =  scale_to_real_world*t.at<double>(1, 0);
-    pose.x += -scale_to_real_world*t.at<double>(2, 0);
-    pose.y +=  scale_to_real_world*t.at<double>(0, 0); // [m]
-    pose.z +=  scale_to_real_world*t.at<double>(1, 0);
+    pose.x += pose.dx;
+    pose.y += pose.dy; // [m]
+    pose.z += pose.dz;
     // Diferencas entre angulos
     pose.droll  = -rad2deg(rod.at<double>(2, 0));
     pose.dpitch =  rad2deg(rod.at<double>(0, 0)); // [DEG]

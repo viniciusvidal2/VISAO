@@ -107,7 +107,7 @@ int main(int argc, char **argv)
   ros::ServiceClient srv = nh.serviceClient<mavros_msgs::StreamRate>("/mavros/set_stream_rate");
   mavros_msgs::StreamRate rate;
   rate.request.stream_id = 0;
-  rate.request.message_rate = 40; // X Hz das mensagens que vem
+  rate.request.message_rate = 10; // X Hz das mensagens que vem
   rate.request.on_off = 1; // Nao sei
   if(srv.call(rate))
     ROS_INFO("Taxado mavros mudada para %d Hz", rate.request.message_rate);
