@@ -75,8 +75,12 @@ Pose_atual pose_filtro_placa;
 Pose_atual pose_leitura_imagem; // Poses referentes a imagem
 Pose_atual pose_filtro_imagem;
 
-int contador_placa, amostras; // Conta quantas iteracoes passam que dai salvamos ou nao
+int contador, amostras; // Conta quantas iteracoes passam que dai salvamos ou nao
 string caminho_atual;
+
+double min_hessian = 2000; // Threshold inicial de achar keypoints
+int min_matches = 20; // Numero minimo de matches entre imagens
+float rate_min_dist = 3.0f, ndevs = 1.5f; // Controle de filtragem
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -154,34 +158,37 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
   pose_leitura_placa.x = odo->pose.pose.position.x;
   pose_leitura_placa.z = odo->pose.pose.position.z;
   // Print para averiguar
-//  cout << "roll: " << R2D*roll             << "\tpitch: " << R2D*pitch            << "\tyaw: " << R2D*yaw              << endl;
-//  cout << "pn:   " << pose_leitura_placa.y << "\tpe:    " << pose_leitura_placa.x << "\talt: " << pose_leitura_placa.z << endl;
+  cout << "roll: " << R2D*roll             << "\tpitch: " << R2D*pitch            << "\tyaw: " << R2D*yaw              << endl;
+  cout << "pn:   " << pose_leitura_placa.y << "\tpe:    " << pose_leitura_placa.x << "\talt: " << pose_leitura_placa.z << endl;
+  cout << "Iteracao: " << contador << endl;
+
   /// Pipeline
   if(primeira_vez){
+
     // Iniciar tudo
     placa.init();
     // Preencher a previous com o que vier
     placa.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS
-    // Vamos salvar a nuvem com o caminho?
-    placa.set_salvar_nuvem(true);
     // Ja foi a primeira vez, virar o flag
     primeira_vez = false;
+
   } else {
-    if(contador_placa <= amostras){
-      cout << "roll: " << R2D*roll             << "\tpitch: " << R2D*pitch            << "\tyaw: " << R2D*yaw              << endl;
-      cout << "pn:   " << pose_leitura_placa.y << "\tpe:    " << pose_leitura_placa.x << "\talt: " << pose_leitura_placa.z << endl;
+
+    if(contador <= amostras){
       // Setar a pose atual com as leituras
       placa.set_pose(pose_leitura_placa, 1); // Salvando na leitura atual
       // Calcular com o pipeline e pegar a pose com diferencas
       placa.process_and_return(pose_filtro_placa);
       // Atualiza contador
-      contador_placa++;
+      contador++;
     } else {
       // Salvar a nuvem apos tantas iteracoes?
-      string nome = "caminho";
+      placa.set_salvar_caminho(true);
+      string nome = "placa";
       placa.salvar_nuvem(nome);
       ros::shutdown();
     }
+
   } // Fim do pipeline
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,19 +196,22 @@ void so_imagem2(const ImageConstPtr msg){
   // Imagem vinda da mensagem
   cv_bridge::CvImagePtr imagemptr;
   imagemptr = cv_bridge::toCvCopy(msg, image_encodings::BGR8);
+
   // Aqui o pipeline decide entre primeira vez, para ajustar tudo, ou nao
   if(primeira_vez){
 
-    // Calibracao e fator de escala
-    string path_left = "calibracao, esquerda";
+    // Calibracao e fator de escala, seguindo a camera da esquerda
+    string path_left  = "calibracao, esquerda";
     string path_right = "calibracao direita";
     im.read_camera_calibration(path_left.c_str());
     im.scale_factor(path_left.c_str(), path_right.c_str());
     // Inicia as imagens
     im.set_image_current(imagemptr->image);
     im.set_image_previous(imagemptr->image);
+    // Remover distorcao das imagens
+    im.undistort_image(0); // Imagem previous somente
     // Ajustar bins para filtrar correspondencias
-    im.set_quadrados(imagemptr->image, 10, 10, false);
+    im.set_quadrados(imagemptr->image, 5, 5, false);
     // Iniciar variaveis no geral
     im.init();
     im.set_pose(pose_leitura_imagem);
@@ -210,7 +220,24 @@ void so_imagem2(const ImageConstPtr msg){
 
   } else { // Aqui temos a acao com a imagem!
 
-  }
+    if(contador <= amostras){
+      // Imagem atual colocada
+      im.set_image_current(imagemptr->image);
+      // Remover distorcao da imagem para garantir
+      im.undistort_image(1); // Imagem atual somente
+      // Pipeline todo aqui
+      im.pipeline(min_hessian, min_matches, rate_min_dist, ndevs);
+      // Pegar a pose calculada a partir da anterior para o filtro
+      im.get_pose(pose_filtro_imagem);
+    } else {
+      im.set_salvar_caminho(true);
+      // Salvar a nuvem apos tantas iteracoes?
+      string nome = "imagem";
+      im.salvar_nuvem(nome);
+      ros::shutdown();
+    }
+
+  } // Fim do pipeline
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
@@ -235,15 +262,15 @@ int main(int argc, char **argv)
   ros::ServiceClient armar_srv = nh.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
   mavros_msgs::CommandBool armar;
   armar.request.value = true;
-//  if(armar_srv.call(armar))
-//    ROS_INFO("Veiculo armado para salvar origem.");
-//  else
-//    ROS_INFO("Nao foi possivel armar o veiculo.");
+  if(armar_srv.call(armar))
+    ROS_INFO("Veiculo armado para salvar origem.");
+  else
+    ROS_INFO("Nao foi possivel armar o veiculo.");
 
   // Visualizar ou nao as imagens da camera
   im.set_visualizar(false);
   // Contador de leituras da placa
-  contador_placa = 0; amostras = 10000;
+  contador = 0; amostras = 2000;
 
   // Iniciar poses de leitura para placa e imagem
   init_pose(pose_leitura_placa);

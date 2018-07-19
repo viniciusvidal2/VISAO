@@ -46,6 +46,7 @@ public:
   ////////////////////////////////////////////// Inicio ////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void init(){
+    // Matrizes do pipeline das imagens
     E = Mat::zeros(3, 3, CV_64F); F = Mat::zeros(3, 3, CV_64F);
     rt_previous = (Mat1d(3, 4) << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0); // [I | 0]
     rt_current  = (Mat1d(3, 4) << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0); // [I | 0]
@@ -57,6 +58,8 @@ public:
       P_current  = rt_current ;
       cout << "\n\n ARRUME A MATRIZ DE CALIBRACAO PRIMEIRO MALUCO \n\n";
     }
+    // Inicio da nuvem
+    nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void read_camera_calibration(string filename){
@@ -68,9 +71,14 @@ public:
     fs.release();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void undistort_image(){
-    Mat temp; image_current.copyTo(temp);
-    undistort(temp, image_current, camera_matrix, dist_coef);
+  void undistort_image(int code){
+    if(code == 0){ // Vamos tirar a distorcao da previous
+      Mat temp; image_previous.copyTo(temp);
+      undistort(temp, image_previous, camera_matrix, dist_coef);
+    } else if(code == 1) { // Tirar da imagem atual
+      Mat temp; image_current.copyTo(temp);
+      undistort(temp, image_current, camera_matrix, dist_coef);
+    }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   float scale_factor(string path_previous, string path_current){
@@ -99,7 +107,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   ///////////////////////////////////////////// Pipeline 2D ////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void get_kpts_and_matches(int min_hessian, int min_matches){
+  void get_kpts_and_matches(double min_hessian, int min_matches, float rate_min_dist, float ndevs){
     // Liberar todos antes de adicionar nessa iteracao
     keypoints_filt_current.clear(); keypoints_filt_previous.clear();
     better_matches.clear();
@@ -136,7 +144,7 @@ public:
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
       }
-      float thresh_dist = 3*min_dist; // Threshold para acabar com matches ruins
+      float thresh_dist = rate_min_dist*min_dist; // Threshold para acabar com matches ruins
       for(int i = 0; i < matches.size(); i++){
         if (matches[i].distance < thresh_dist){ // Aqui crio matches novo e vetor dos pontos dos keypoints ORGANIZADOS,
           better_matches.push_back(matches[i]); // porem daqui em diante apago os que nao forem bons
@@ -147,7 +155,7 @@ public:
       // Filtrando por bins
       filter_bins();
       // Filtrando por coeficiente angular
-      filter_lines(0.5); // Quantos desvios padroes vai ser o limite
+      filter_lines(ndevs); // Quantos desvios padroes vai ser o limite
 
       ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_previous.size(), keypoints_filt_current.size());
       // Limpando para proxima iteracao, se existir
@@ -202,20 +210,21 @@ public:
   void filter_lines(float ndevs){
     // Keypoints ja correspondem um a um nesse estagio.
     double mean_coef, sum_coef = 0, stdev_coef;
+    double xp, yp, xc, yc;
     vector<float> coefs(keypoints_filt_previous.size());
     for(int i=0; i<keypoints_filt_previous.size(); i++){
-      // Guardar coordenadas dos pontos
-      float xl = keypoints_filt_previous[i].x                     , yl = keypoints_filt_previous[i].y;
-      float xr = keypoints_filt_current[i].x + image_previous.cols, yr = keypoints_filt_current[i].y; // Como se a segunda imagem estivesse a direita
+      // Guardar coordenadas dos pontos, como se a segunda imagem estivesse a direita
+      xp = keypoints_filt_previous[i].x                     , yp = keypoints_filt_previous[i].y;
+      xc = keypoints_filt_current[i].x + image_previous.cols, yc = keypoints_filt_current[i].y;
       // Posicionando imagens lado a lado, (anterior a esquerda, atual a direita), calcular coef. angular
-      coefs[i] = (yr - yl)/(xr - xl);
+      coefs[i] = (yc - yp)/(xc - xp);
     }
     // Criar media e desvio padrao do coef. angular
     mean_coef = accumulate(coefs.begin(), coefs.end(), 0.0)/coefs.size();
     for(vector<float>::iterator it=coefs.begin(); it!=coefs.end(); it++)
       sum_coef += (*it - mean_coef) * (*it - mean_coef);
     stdev_coef = sqrt( sum_coef/(coefs.size()-1) );
-    cout << "MEDIA: " << mean_coef << "\tSTD_DEV: " << stdev_coef << endl;
+//    cout << "MEDIA: " << mean_coef << "\tSTD_DEV: " << stdev_coef << endl;
     // Checar quem esta dentro de um desvio padrao
     for(int i=0; i<keypoints_filt_previous.size(); i++){
       if( (coefs[i] < (mean_coef-stdev_coef*ndevs)) || (coefs[i] > (mean_coef+stdev_coef*ndevs)) ){ // Se fora dos limites
@@ -302,6 +311,10 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_visualizar(bool vis){
     visualizar = vis;
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void set_salvar_caminho(bool salvar){
+    vamos_salvar_caminho = salvar;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_quadrados(Mat pict, int m, int n, bool vis){
@@ -391,10 +404,10 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////// PRINCIPAL /////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void pipeline(){
+  void pipeline(double min_hessian = 2000, int min_matches = 20, float rate_min_dist = 3.0f, float ndevs = 1.5f){
 
     // Calcular keypoints, descriptors, fazer matches e filtra-las
-    get_kpts_and_matches(2000, 20);
+    get_kpts_and_matches(min_hessian, min_matches, rate_min_dist, ndevs);
     // Calculo da matriz fundamental F
     F = findFundamentalMat(keypoints_filt_previous, keypoints_filt_current);
     // Calculo da matriz essencial E
@@ -402,13 +415,16 @@ public:
     //  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, camera_matrix, RANSAC, 0.999, 1e-4);
     // Obtencao de rotacao e translacao
     inliers = recoverPose(E, keypoints_filt_previous, keypoints_filt_current, camera_matrix, R, t);
-    cout << "Inliers:  "             << inliers << " de " << keypoints_filt_previous.size() << endl;
+    cout << "Inliers:  " << inliers << " de " << keypoints_filt_previous.size() << endl;
     // Ajuste de matrizes de projecao e parametros extrinsecos para a current somente
     set_rt_and_projection_matrix();
     // Angulos de rotacao
     Rodrigues(R, rod);
     // Update das variaveis atuais
     update_pose();
+    // Vamos salvar o caminho?
+    if(vamos_salvar_caminho)
+      atualizar_nuvem();
     // Ajuste para as proximas iteracoes (current -> previous)
     image_current.copyTo(image_previous);
     F.release(); E.release();
@@ -420,8 +436,56 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void salvar_nuvem(string path){
+    if(vamos_salvar_caminho){
+      ROS_INFO("Salvando o caminho...");
+      // Ver o tempo para diferenciar bags gravadas automaticamente
+      time_t t = time(0);
+      struct tm * now = localtime( & t );
+      std::string month, day, hour, minutes;
+      month   = boost::lexical_cast<std::string>(now->tm_mon );
+      day     = boost::lexical_cast<std::string>(now->tm_mday);
+      hour    = boost::lexical_cast<std::string>(now->tm_hour);
+      minutes = boost::lexical_cast<std::string>(now->tm_min );
+      string date = "_" + month + "_" + day + "_" + hour + "h_" + minutes + "m";
+      string filename = "/home/vinicius/visao_ws/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
+      // Salvando com o nome diferenciado
+      io::savePLYFileASCII(filename, *nuvem);
+      ROS_INFO("Salvo na area de trabalho");
+      // Visualizar a nuvem com PCL
+      visualizar_nuvem();
+    } else {
+      ROS_INFO("NAO SALVAMOS O CAMINHO PORQUE NAO ERA PRA SALVAR MANEZAO");
+    }
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 private:
-  bool visualizar;
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void atualizar_nuvem(){
+    // Preenchendo o ponto com dados atuais
+    point.x        = pose.x;
+    point.y        = pose.y;
+    point.z        = pose.z;
+    point.r = 250.0f; point.g = 250.0f; point.b = 250.0f;
+    point.normal_x = pose.roll;
+    point.normal_y = pose.pitch;
+    point.normal_z = pose.yaw;
+    // Adicionando a nuvem
+    nuvem->push_back(point);
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void visualizar_nuvem(){
+    boost::shared_ptr<PCLVisualizer> vis_im (new PCLVisualizer("caminho"));
+    vis_im->addPointCloud<PointXYZRGBNormal>(nuvem, "caminho");
+    vis_im->spin();
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /// Variaveis privadas
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  bool visualizar; // Visualizar as etapas das imagens
+  bool vamos_salvar_caminho; // Salvar o caminho na nuvem
+
   Mat camera_matrix, dist_coef, rect; // Vindos do arquivo de calibracao
   Mat image_previous, image_current; // Imagem anterior e atual para comparar
   PointCloud<PointT>::Ptr cloud;
@@ -437,6 +501,9 @@ private:
   Mat rt_previous, rt_current, P_previous, P_current; // Matrizes de parametros extrinsecos e matriz de projecao
   double roll_current, pitch_current, yaw_current; // Angulos atuais [DEG]
   double tx, ty, tz; // Translacoes atuais [m]
+
+  PointCloud<PointXYZRGBNormal>::Ptr nuvem; // Caminho
+  PointXYZRGBNormal point; // Ponto atual para a nuvem
 
   int M; // Quantos quadrados no eixo  X (columns)
   int N; // Quantos quadrados no eixo -Y (rows)

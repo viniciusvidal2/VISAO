@@ -52,7 +52,7 @@ public:
     }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void set_salvar_nuvem(bool salvar){
+  void set_salvar_caminho(bool salvar){
     vamos_salvar_nuvem = salvar;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -81,26 +81,19 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void visualizar_nuvem(){
-    boost::shared_ptr<PCLVisualizer> vis_placa (new PCLVisualizer("caminho"));
-    vis_placa->addPointCloud<PointXYZRGBNormal>(nuvem, "caminho");
-    vis_placa->spin();
-  }
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void salvar_nuvem(string path){
     if(vamos_salvar_nuvem){
       ROS_INFO("Salvando o caminho...");
       // Ver o tempo para diferenciar bags gravadas automaticamente
       time_t t = time(0);
       struct tm * now = localtime( & t );
-      std::string year, month, day, hour, minutes;
-      year    = boost::lexical_cast<std::string>(now->tm_year + 1900);
+      std::string month, day, hour, minutes;
       month   = boost::lexical_cast<std::string>(now->tm_mon );
       day     = boost::lexical_cast<std::string>(now->tm_mday);
       hour    = boost::lexical_cast<std::string>(now->tm_hour);
       minutes = boost::lexical_cast<std::string>(now->tm_min );
-      string date = "_" + year + "_" + month + "_" + day + "_" + hour + "h_" + minutes + "m";
-      string filename = "/home/vinicius/Desktop/"+path+date+".ply";
+      string date = "_" + month + "_" + day + "_" + hour + "h_" + minutes + "m";
+      string filename = "/home/vinicius/visao_ws/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
       // Salvando com o nome diferenciado
       io::savePLYFileASCII(filename, *nuvem);
       ROS_INFO("Salvo na area de trabalho");
@@ -135,6 +128,13 @@ private:
     // Adicionando a nuvem
     nuvem->push_back(point);
   }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void visualizar_nuvem(){
+    boost::shared_ptr<PCLVisualizer> vis_placa (new PCLVisualizer("caminho"));
+    vis_placa->addPointCloud<PointXYZRGBNormal>(nuvem, "caminho");
+    vis_placa->spin();
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /// Variaveis privadas
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
