@@ -117,8 +117,18 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
   m.getRPY(roll, pitch, yaw);
   // Posicao
   pn = odo->pose.pose.position.y; pe = odo->pose.pose.position.x; altura = odo->pose.pose.position.z;
+  // Print para averiguar
   cout << "roll: " << R2D*roll << "\tpitch: " << R2D*pitch << "\tyaw: " << R2D*yaw << endl;
-  cout << "pn: "   << pn   << "\tpe: "    << pe    << "\talt: " << altura << endl;
+  cout << "pn:   " << pn       << "\tpe:    " << pe        << "\talt: " << altura  << endl;
+  /// Pipeline
+  if(primeira_vez){
+    // Iniciar tudo
+    // Preencher a previous com o que vier
+  } else {
+    // Setar a pose atual com as leituras
+    // Calcular com o pipeline e pegar a pose com diferencas
+    // Salvar a nuvem apos tantas iteracoes?
+  }
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 void so_imagem2(const ImageConstPtr msg){
