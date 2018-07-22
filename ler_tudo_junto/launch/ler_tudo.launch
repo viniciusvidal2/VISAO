@@ -1,6 +1,30 @@
 <launch>
-    <include file="$(find mavros)/launch/px4.launch">
-    </include>
-    <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_node" output="screen">
+
+    <arg name="placa"  default="false"/>
+    <arg name="zed"    default="false"/>
+    <arg name="imagem" default="false"/>
+    <arg name="resolution" default="2"/>
+    <arg name="frame_rate" default="30"/>
+
+
+
+    <!--Vamos ler a placa?-->
+    <group if="$(arg placa)">
+        <include file="$(find mavros)/launch/px4.launch">
+        </include>
+    </group>
+    <!--Vamos ler a ZED?-->
+    <group if="$(arg zed)">
+        <include file="$(find zed_wrapper)/launch/zed.launch">
+            <param name="resolution" value="$(arg resolution)"/>
+            <param name="frame_rate" value="$(arg frame_rate)"/>
+        </include>
+    </group>
+
+
+
+    <!--Aqui o no principal a partir das dependencias-->
+    <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_junto_node" output="screen">
     </node>
+
 </launch>

@@ -44,6 +44,7 @@
 // Nossos includes
 #include "../../libraries/imagem2.cpp"
 #include "../../libraries/placa.cpp"
+#include "../../libraries/zed.cpp"
 #include "../../libraries/pose.h"
 
 using namespace std;
@@ -59,24 +60,28 @@ typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Variaveis globais
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-double roll, pitch, yaw; // Leituras de angulos da placa [RAD]
+double roll, pitch, yaw, roll2, pitch2, yaw2; // Leituras de angulos da placa [RAD]
 double R2D = 180.0/M_PI; // Conversao
-bool so_sensores = true, so_imagem = false; // Flags de controle
+bool so_sensores = false, so_imagem = false, so_zed = true; // Flags de controle
 bool primeira_vez = true;
 
-ros::Subscriber subodo_, subima_; // Subscribers para dados em separado
+ros::Subscriber subodo_, subima_, subzed_; // Subscribers para dados em separado
 
 Imagem2 im; // Objeto de tratamento da imagem
 
 Placa placa; // Objeto de tratamento da placa
 
+ZED zed; // Objeto de tratamento da ZED
+ros::ServiceClient iniciar_pose_leitura_zed;
+
 Pose_atual pose_leitura_placa; // Poses referentes a placa
 Pose_atual pose_filtro_placa;
 Pose_atual pose_leitura_imagem; // Poses referentes a imagem
 Pose_atual pose_filtro_imagem;
+Pose_atual pose_leitura_zed; // Pose de leitura da zed, vamos ver
+Pose_atual pose_filtro_zed;
 
-int contador, amostras; // Conta quantas iteracoes passam que dai salvamos ou nao
-string caminho_atual;
+int contador = 0, contador2 = 0, amostras = 1000; // Conta quantas iteracoes passam que dai salvamos ou nao
 
 double min_hessian = 2000; // Threshold inicial de achar keypoints
 int min_matches = 20; // Numero minimo de matches entre imagens
@@ -138,7 +143,7 @@ void informacoes_sincronizadas(const OdometryConstPtr& odo, const ImageConstPtr&
   ros::shutdown();
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-void so_placa(const nav_msgs::OdometryConstPtr& odo){
+void so_placa_cb(const nav_msgs::OdometryConstPtr& odo){
   /// Armazenar os dados todos
   /// Angulos atuais
   /// Angulos atuais [RAD]
@@ -169,6 +174,8 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
     placa.init();
     // Preencher a previous com o que vier
     placa.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS
+    // Salvar a nuvem apos tantas iteracoes?
+    placa.set_salvar_caminho(true);
     // Ja foi a primeira vez, virar o flag
     primeira_vez = false;
 
@@ -182,8 +189,7 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
       // Atualiza contador
       contador++;
     } else {
-      // Salvar a nuvem apos tantas iteracoes?
-      placa.set_salvar_caminho(true);
+      // Salvar se foi setado para tal
       string nome = "placa";
       placa.salvar_nuvem(nome);
       ros::shutdown();
@@ -192,7 +198,7 @@ void so_placa(const nav_msgs::OdometryConstPtr& odo){
   } // Fim do pipeline
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-void so_imagem2(const ImageConstPtr msg){
+void so_imagem_cb(const ImageConstPtr msg){
   // Imagem vinda da mensagem
   cv_bridge::CvImagePtr imagemptr;
   imagemptr = cv_bridge::toCvCopy(msg, image_encodings::BGR8);
@@ -215,6 +221,8 @@ void so_imagem2(const ImageConstPtr msg){
     // Iniciar variaveis no geral
     im.init();
     im.set_pose(pose_leitura_imagem);
+    // Salvar a nuvem apos tantas iteracoes?
+    im.set_salvar_caminho(true);
     // Ja esta tudo pronto para a proxima!
     primeira_vez = false;
 
@@ -230,10 +238,69 @@ void so_imagem2(const ImageConstPtr msg){
       // Pegar a pose calculada a partir da anterior para o filtro
       im.get_pose(pose_filtro_imagem);
     } else {
-      im.set_salvar_caminho(true);
-      // Salvar a nuvem apos tantas iteracoes?
+      // Salvar se foi setado para tal
       string nome = "imagem";
       im.salvar_nuvem(nome);
+      ros::shutdown();
+    }
+
+  } // Fim do pipeline
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+void so_zed_cb(const nav_msgs::OdometryConstPtr& odo){
+  /// Armazenar os dados todos
+  /// Angulos atuais [RAD]
+  /// YAW:   eixo Z para cima da ZED, sentido anti-horario positivo, 0 no inicio da movimentacao
+  /// ROLL:  eixo X para a frente da ZED, sentido horario e positivo, 0 no inicio da movimentacao
+  /// PITCH: eixo Y para a esquerda da ZED, sentido horario e positivo, bico pra baixo positivo, empinada negativa, 0 no inicio da movimentacao
+  tf::Quaternion q(odo->pose.pose.orientation.x, odo->pose.pose.orientation.y, odo->pose.pose.orientation.z, odo->pose.pose.orientation.w);
+  tf::Matrix3x3 m(q);
+  m.getRPY(roll2, pitch2, yaw2);
+  pose_leitura_zed.roll = rad2deg(roll2); pose_leitura_zed.pitch = rad2deg(pitch2); pose_leitura_zed.yaw = rad2deg(yaw2); // [DEG]
+  /// Posicao Body Frame [m]
+  /// X: para frente da ZED
+  /// Y: para esquerda da ZED
+  /// Z: para cima da ZED
+  pose_leitura_zed.x = odo->pose.pose.position.x;
+  pose_leitura_zed.y = odo->pose.pose.position.y;
+  pose_leitura_zed.z = odo->pose.pose.position.z;
+  // Print para averiguar
+  cout << "roll: " << R2D*roll2          << "\tpitch: " << R2D*pitch2         << "\tyaw: " << R2D*yaw2           << endl;
+  cout << "X:    " << pose_leitura_zed.x << "\tY:     " << pose_leitura_zed.y << "\tZ:   " << pose_leitura_zed.z << endl;
+  cout << "Iteracao: " << contador2 << endl;
+
+  /// Pipeline
+  if(primeira_vez){
+    // Setar a pose primeiro para o no da ZED
+//    zed_wrapper::set_initial_pose sipzed;
+//    sipzed.request.x = 0; sipzed.request.y = 0; sipzed.request.z = 0;
+//    sipzed.request.R = 0; sipzed.request.P = 0; sipzed.request.Y = 0;
+//    if(iniciar_pose_leitura_zed.call(sipzed))
+//      ROS_INFO("Pose inicial da ZED alterada com sucesso");
+//    else
+//      ROS_INFO("Nao teve contato com a ZED");
+    // Iniciar tudo
+    zed.init();
+    // Preencher a previous com o que vier
+    zed.set_pose(pose_leitura_zed, 0); // Salvando na PREVIOUS
+    // Salvar a nuvem apos tantas iteracoes?
+    zed.set_salvar_caminho(true);
+    // Ja foi a primeira vez, virar o flag
+    primeira_vez = false;
+
+  } else {
+
+    if(contador2 <= amostras){
+      // Setar a pose atual com as leituras
+      zed.set_pose(pose_leitura_zed, 1); // Salvando na leitura atual
+      // Calcular com o pipeline e pegar a pose com diferencas
+      zed.process_and_return(pose_filtro_zed);
+      // Atualiza contador
+      contador2++;
+    } else {
+      // Salvar se foi setado para tal
+      string nome = "zed";
+      zed.salvar_nuvem(nome);
       ros::shutdown();
     }
 
@@ -266,32 +333,35 @@ int main(int argc, char **argv)
     ROS_INFO("Veiculo armado para salvar origem.");
   else
     ROS_INFO("Nao foi possivel armar o veiculo.");
+  // Preparar para enviar pose inicial ao no da ZED
+//  iniciar_pose_leitura_zed = nh.serviceClient<zed_wrapper::set_initial_pose>("/zed/set_initial_pose");
 
   // Visualizar ou nao as imagens da camera
   im.set_visualizar(false);
-  // Contador de leituras da placa
-  contador = 0; amostras = 2000;
 
   // Iniciar poses de leitura para placa e imagem
   init_pose(pose_leitura_placa);
   init_pose(pose_filtro_placa);
   init_pose(pose_leitura_imagem);
   init_pose(pose_filtro_imagem);
+  init_pose(pose_leitura_zed);
 
   // Subscribers para ler sincronizadas as informacoes
-  if(!so_sensores && !so_imagem){
+  if(!so_sensores && !so_imagem && !so_zed){
     message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
-    message_filters::Subscriber<Image>    subima(nh, "/stereo/left/image_rect"      , 100);
+    message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_rect_color"   , 100);
     // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
     Synchronizer<syncPolicy> sync(syncPolicy(100), subodo, subima);
     sync.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
   }
   // Subscriber para ler so a placa com a mensagem de pose
   if(so_sensores)
-    subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa);
+    subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa_cb );
   // Subscriber para ler so o topico de imagens
   if(so_imagem)
-    subima_ = nh.subscribe("nomedotopicoaqui", 100, so_imagem2);
+    subima_ = nh.subscribe("/zed/left/image_rect_color"   , 100, so_imagem_cb);
+  if(so_zed)
+    subzed_ = nh.subscribe("/zed/odom"                    , 100, so_zed_cb   );
 
   ros::spin();
 
