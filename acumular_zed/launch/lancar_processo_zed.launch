@@ -1,0 +1,28 @@
+<launch>
+    <arg name="acumular" default="true"/>
+    <arg name="resolution" default="2"/>
+    <arg name="frame_rate" default="5"/>
+    <arg name="rviz" default="false"/>
+    <arg name="preprocessar" default="true"/>
+    <arg name="leaf_size" default="0.01"/>
+
+    <!--Iniciar o no da ZED com alguns parametros-->
+    <include file="$(find zed_wrapper)/launch/zed.launch">
+        <param name="resolution" value="$(arg resolution)"/>
+        <param name="frame_rate" value="$(arg frame_rate)"/>
+    </include>
+
+    <!--Nosso no, acumulando com os nomes para topicos e nuvem-->
+    <node pkg="acumular_zed" type="acumular_zed_node" name="acumular_zed" output="screen">
+      <remap from="input_cloud" to="/zed/point_cloud/cloud_registered"/>
+      <remap from="input_odom"  to="/zed/odom"/>
+      <remap from="odom" to="odom"/>
+    </node>
+
+    <!--Queremos ver no rviz o resultado?-->
+    <group if="$(arg rviz)">
+        <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-f odom -d $(find acumular_zed)/resources/visual.rviz">
+        </node>
+    </group>
+
+</launch>
