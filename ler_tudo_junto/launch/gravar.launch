@@ -1,0 +1,17 @@
+<launch>
+
+    <arg name="bag" default=""/>
+    <arg name="local" default=""/>
+    <arg name="only_raw_data" default="false"/>
+
+    <group if="$(arg only_raw_data)">
+        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position_local /zed/left/image_rect_color /zed/right/image_rect_color /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
+        </node>
+    </group>
+
+    <group unless="$(arg only_raw_data)">
+        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position_local /zed/left/image_rect_color/compressed /zed/right/image_rect_color/compressed /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
+        </node>
+    </group>
+
+</launch>

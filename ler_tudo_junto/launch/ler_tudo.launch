@@ -5,6 +5,10 @@
     <arg name="imagem" default="false"/>
     <arg name="resolution" default="2"/>
     <arg name="frame_rate" default="30"/>
+    <arg name="processar" default="true"/>
+    <arg name="gravar" default="false"/>
+    <arg name="bag" default=""/>
+    <arg name="local" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
 
 
 
@@ -21,10 +25,18 @@
         </include>
     </group>
 
-
-
     <!--Aqui o no principal a partir das dependencias-->
-    <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_junto_node" output="screen">
-    </node>
+    <group if="$(arg processar)">
+        <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_junto_node" output="screen">
+        </node>
+    </group>
+
+    <!--Se for gravar chama o outro arquivo launch do no-->
+    <group if="$(arg gravar)">
+        <include file="$(find ler_tudo_junto)/launch/gravar.launch">
+            <param name="bag" value="$(arg bag)"/>
+            <param name="local" value="$(arg local)"/>
+        </include>
+    </group>
 
 </launch>

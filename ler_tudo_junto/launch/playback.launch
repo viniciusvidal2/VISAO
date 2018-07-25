@@ -1,0 +1,25 @@
+<launch>
+
+    <arg name="processar" default="true"/>
+    <arg name="bag" default=""/>
+    <arg name="paste" default="/home/$(env USER)/Desktop"/>
+    <arg name="rate" default="0.1"/>
+
+    <!--Repassar as imagens comprimidas no bag-->
+    <node pkg="image_transport" type="republish" name="republish_left" output="screen" args="compressed in:=/zed/left/image_rect_color raw out:=/zed/left/image_rect_color"/>
+    <node pkg="image_transport" type="republish" name="republish_right" output="screen" args="compressed in:=/zed/right/image_rect_color raw out:=/zed/right/image_rect_color"/>
+
+    <!--Tocar o bag-->
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args=" $(arg pasta)/$(arg bag).bag --clock -r $(arg rate) --start=0.0"/>
+
+    <!--Nosso no para processar-->
+    <group if="$(arg processar)">
+        <include file="$(find ler_tudo_junto)/launch/ler_tudo.launch">
+            <param name="placa" value="false"/>
+            <param name="zed" value="false"/>
+            <param name="processar" value="true"/>
+            <param name="gravar" value="false"/>
+        </include>
+    </group>
+
+</launch>

@@ -272,13 +272,7 @@ void so_zed_cb(const nav_msgs::OdometryConstPtr& odo){
   /// Pipeline
   if(primeira_vez){
     // Setar a pose primeiro para o no da ZED
-//    zed_wrapper::set_initial_pose sipzed;
-//    sipzed.request.x = 0; sipzed.request.y = 0; sipzed.request.z = 0;
-//    sipzed.request.R = 0; sipzed.request.P = 0; sipzed.request.Y = 0;
-//    if(iniciar_pose_leitura_zed.call(sipzed))
-//      ROS_INFO("Pose inicial da ZED alterada com sucesso");
-//    else
-//      ROS_INFO("Nao teve contato com a ZED");
+
     // Iniciar tudo
     zed.init();
     // Preencher a previous com o que vier
@@ -333,8 +327,6 @@ int main(int argc, char **argv)
     ROS_INFO("Veiculo armado para salvar origem.");
   else
     ROS_INFO("Nao foi possivel armar o veiculo.");
-  // Preparar para enviar pose inicial ao no da ZED
-//  iniciar_pose_leitura_zed = nh.serviceClient<zed_wrapper::set_initial_pose>("/zed/set_initial_pose");
 
   // Visualizar ou nao as imagens da camera
   im.set_visualizar(false);
