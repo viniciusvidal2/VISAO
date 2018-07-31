@@ -1,28 +1,55 @@
 <launch>
     <arg name="acumular" default="true"/>
+
     <arg name="resolution" default="2"/>
     <arg name="frame_rate" default="5"/>
+
     <arg name="rviz" default="false"/>
-    <arg name="preprocessar" default="true"/>
-    <arg name="leaf_size" default="0.01"/>
+
+    <arg name="online" default="true"/>
+    <arg name="gravar" default="false"/>
+    <arg name="playbak" default="false"/>
+    <arg name="bag" default=""/>
+    <arg name="local" default=""/>
+    <arg name="rate" default="0.1"/>
 
     <!--Iniciar o no da ZED com alguns parametros-->
-    <include file="$(find zed_wrapper)/launch/zed.launch">
-        <param name="resolution" value="$(arg resolution)"/>
-        <param name="frame_rate" value="$(arg frame_rate)"/>
-    </include>
+    <group if="$(arg online)">
+        <include file="$(find zed_wrapper)/launch/zed.launch">
+            <param name="resolution" value="$(arg resolution)"/>
+            <param name="frame_rate" value="$(arg frame_rate)"/>
+        </include>
+    </group>
+
+    <!--Tocar algum bag anterior aqui ou nao-->
+    <group if="$(arg playback)">
+        <!--Repassar as imagens comprimidas no bag-->
+        <node pkg="image_transport" type="republish" name="republish_left" output="screen" args="compressed in:=/zed/left/image_rect_color raw out:=/zed/left/image_rect_color"/>
+        <node pkg="image_transport" type="republish" name="republish_right" output="screen" args="compressed in:=/zed/right/image_rect_color raw out:=/zed/right/image_rect_color"/>
+        <!--Tocar o bag-->
+        <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args=" $(arg local)/$(arg bag).bag --clock -r $(arg rate) --start=0.0"/>
+    </group>
+
+    <!--Na verdade vamos gravar em bag tambem tudo, entao gravar (normalmente no modo online):-->
+    <group if="$(arg gravar)">
+        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/zed/left/image_rect_color/compressed /zed/right/image_rect_color/compressed /zed/point_cloud/cloud_registered /zed/odom -O $(arg local)/$(arg bag)">
+        </node>
+    </group>
 
     <!--Nosso no, acumulando com os nomes para topicos e nuvem-->
-    <node pkg="acumular_zed" type="acumular_zed_node" name="acumular_zed" output="screen">
-      <remap from="input_cloud" to="/zed/point_cloud/cloud_registered"/>
-      <remap from="input_odom"  to="/zed/odom"/>
-      <remap from="odom" to="odom"/>
-    </node>
+    <group if="$(arg acumular)">
+        <node pkg="acumular_zed" type="acumular_zed_node" name="acumular_zed" output="screen">
+            <remap from="input_cloud" to="/zed/point_cloud/cloud_registered"/>
+            <remap from="input_odom"  to="/zed/odom"/>
+            <remap from="odom" to="odom"/>
+        </node>
+    </group>
 
     <!--Queremos ver no rviz o resultado?-->
     <group if="$(arg rviz)">
         <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-f odom -d $(find acumular_zed)/resources/visual.rviz">
         </node>
     </group>
+
 
 </launch>
