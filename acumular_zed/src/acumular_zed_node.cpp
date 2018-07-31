@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 
   // Subscriber para a nuvem instantanea e odometria
   message_filters::Subscriber<sensor_msgs::PointCloud2> subptc(nh, "input_cloud", 100);
-  message_filters::Subscriber<Odometry>    subodo(nh, "input_odom" , 100);
+  message_filters::Subscriber<Odometry>                 subodo(nh, "input_odom" , 100);
   // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
   Synchronizer<syncPolicy> sync(syncPolicy(100), subptc, subodo);
   sync.registerCallback(boost::bind(&acumular_nuvem, _1, _2));

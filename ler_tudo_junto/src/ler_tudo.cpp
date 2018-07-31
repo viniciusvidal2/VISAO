@@ -62,10 +62,13 @@ typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 double roll, pitch, yaw, roll2, pitch2, yaw2; // Leituras de angulos da placa [RAD]
 double R2D = 180.0/M_PI; // Conversao
-bool so_sensores = false, so_imagem = false, so_zed = true; // Flags de controle
+bool so_sensores = false, so_imagem = true, so_zed = false; // Flags de controle
 bool primeira_vez = true;
 
 ros::Subscriber subodo_, subima_, subzed_; // Subscribers para dados em separado
+ros::Publisher pub_im_odo; // Para enviar a odometria vinda so da imagem
+
+Odometry imagem_odometry_msg;
 
 Imagem2 im; // Objeto de tratamento da imagem
 
@@ -83,33 +86,33 @@ Pose_atual pose_filtro_zed;
 
 int contador = 0, contador2 = 0, amostras = 1000; // Conta quantas iteracoes passam que dai salvamos ou nao
 
-double min_hessian = 2000; // Threshold inicial de achar keypoints
-int min_matches = 20; // Numero minimo de matches entre imagens
+double min_hessian = 11000; // Threshold inicial de achar keypoints
+int min_matches = 10; // Numero minimo de matches entre imagens
 float rate_min_dist = 3.0f, ndevs = 1.5f; // Controle de filtragem
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Matematica retirada de:
 /// https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-void toEulerAngle(Quaternion q, double& roll, double& pitch, double& yaw)
-{
-  // roll (x-axis rotation)
-  double sinr = 2.0*(q.w*q.x + q.y*q.z);
-  double cosr = 1.0 - 2.0*(q.x*q.x + q.y*q.y);
-  roll = atan2(sinr, cosr);
+//void toEulerAngle(Quaternion<double> q, double& roll, double& pitch, double& yaw)
+//{
+//  // roll (x-axis rotation)
+//  double sinr = 2.0*(q.w*q.x + q.y*q.z);
+//  double cosr = 1.0 - 2.0*(q.x*q.x + q.y*q.y);
+//  roll = atan2(sinr, cosr);
 
-  // pitch (y-axis rotation)
-  double sinp = 2.0*(q.w*q.y - q.z*q.x);
-  if (fabs(sinp) >= 1)
-    pitch = copysign(M_PI/2, sinp); // use 90 degrees if out of range
-  else
-    pitch = asin(sinp);
+//  // pitch (y-axis rotation)
+//  double sinp = 2.0*(q.w*q.y - q.z*q.x);
+//  if (fabs(sinp) >= 1)
+//    pitch = copysign(M_PI/2, sinp); // use 90 degrees if out of range
+//  else
+//    pitch = asin(sinp);
 
-  // yaw (z-axis rotation)
-  double siny = 2.0*(q.w*q.z + q.x*q.y);
-  double cosy = 1.0 - 2.0*(q.y*q.y + q.z*q.z);
-  yaw = atan2(siny, cosy);
-}
+//  // yaw (z-axis rotation)
+//  double siny = 2.0*(q.w*q.z + q.x*q.y);
+//  double cosy = 1.0 - 2.0*(q.y*q.y + q.z*q.z);
+//  yaw = atan2(siny, cosy);
+//}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 void init_pose(Pose_atual &_pose){
   _pose.x     = 0; _pose.y      = 0; _pose.z    = 0;
@@ -207,8 +210,8 @@ void so_imagem_cb(const ImageConstPtr msg){
   if(primeira_vez){
 
     // Calibracao e fator de escala, seguindo a camera da esquerda
-    string path_left  = "calibracao, esquerda";
-    string path_right = "calibracao direita";
+    string path_left  = "/home/mrs/visao_ws/src/VISAO/match_images/calibracao/zed_left.yaml";
+    string path_right = "/home/mrs/visao_ws/src/VISAO/match_images/calibracao/zed_right.yaml";
     im.read_camera_calibration(path_left.c_str());
     im.scale_factor(path_left.c_str(), path_right.c_str());
     // Inicia as imagens
@@ -237,10 +240,18 @@ void so_imagem_cb(const ImageConstPtr msg){
       im.pipeline(min_hessian, min_matches, rate_min_dist, ndevs);
       // Pegar a pose calculada a partir da anterior para o filtro
       im.get_pose(pose_filtro_imagem);
+      // Pegar a mensagem de odometria e publicar
+      im.get_odometry_msg(imagem_odometry_msg);
+      imagem_odometry_msg.header.stamp = ros::Time::now(); //msg->header.stamp;
+      pub_im_odo.publish(imagem_odometry_msg);
+      // Atualiza contador
+      cout << "Iteracao: " << contador << endl;
+      contador++;
     } else {
       // Salvar se foi setado para tal
       string nome = "imagem";
       im.salvar_nuvem(nome);
+      sleep(3);
       ros::shutdown();
     }
 
@@ -341,7 +352,7 @@ int main(int argc, char **argv)
   // Subscribers para ler sincronizadas as informacoes
   if(!so_sensores && !so_imagem && !so_zed){
     message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
-    message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_rect_color"   , 100);
+    message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_raw_color"   , 100);
     // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
     Synchronizer<syncPolicy> sync(syncPolicy(100), subodo, subima);
     sync.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
@@ -350,8 +361,10 @@ int main(int argc, char **argv)
   if(so_sensores)
     subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa_cb );
   // Subscriber para ler so o topico de imagens
-  if(so_imagem)
-    subima_ = nh.subscribe("/zed/left/image_rect_color"   , 100, so_imagem_cb);
+  if(so_imagem){
+    subima_ = nh.subscribe("/zed/left/image_raw_color"   , 100, so_imagem_cb);
+    pub_im_odo = nh.advertise<Odometry>("/so_imagem/odom", 100);
+  }
   if(so_zed)
     subzed_ = nh.subscribe("/zed/odom"                    , 100, so_zed_cb   );
 

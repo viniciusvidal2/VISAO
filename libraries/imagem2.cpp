@@ -27,7 +27,13 @@
 #include <string>
 #include <numeric>
 
+#include <nav_msgs/Odometry.h>
+
 #include <ros/ros.h>
+
+#include <Eigen/Geometry>
+#include <Eigen/Dense>
+#include <Eigen/Core>
 
 #include "pose.h"
 
@@ -36,6 +42,7 @@ using namespace pcl::visualization;
 using namespace cv;
 using namespace cv::xfeatures2d;
 using namespace std;
+using namespace Eigen;
 
 typedef PointXYZRGB PointT;
 
@@ -60,6 +67,8 @@ public:
     }
     // Inicio da nuvem
     nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
+    // Inicio com o frame da mensagem
+    odometry.header.frame_id = "odom";
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void read_camera_calibration(string filename){
@@ -110,12 +119,14 @@ public:
   void get_kpts_and_matches(double min_hessian, int min_matches, float rate_min_dist, float ndevs){
     // Liberar todos antes de adicionar nessa iteracao
     keypoints_filt_current.clear(); keypoints_filt_previous.clear();
+    descriptors_previous.release(); descriptors_current.release();
     better_matches.clear();
     // Variaveis locais temporarias para guardar informacoes de kpts e matches gerais
     FlannBasedMatcher matcher;
     //    BFMatcher matcher(NORM_HAMMING);
     vector<KeyPoint> keypoints_previous, keypoints_current;
     vector<DMatch> matches;
+
     // Loop para pegar o minimo de matches exigido
     while (better_matches.size() < min_matches){ // Obter o minimo possivel de matches, senao abaixa o threshold do descritor SURF
       // Detectando keypoints no geral
@@ -123,20 +134,22 @@ public:
       //      Ptr<AKAZE> detector = AKAZE::create(AKAZE::DESCRIPTOR_MLDB, 0, 3, min_hessian, 4, 4, KAZE::DIFF_PM_G2);
       detector->detectAndCompute(image_previous, Mat(), keypoints_previous, descriptors_previous);
       detector->detectAndCompute(image_current,  Mat(), keypoints_current,  descriptors_current );
+
       // visualizar se ok
       if (visualizar){
         Mat image_kpts_previous, image_kpts_current;
-        drawKeypoints( image_previous , keypoints_previous , image_kpts_previous , Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
-        drawKeypoints( image_current, keypoints_current, image_kpts_current, Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
-        namedWindow("Keypoints previous" , WINDOW_NORMAL);
-        namedWindow("Keypoints current", WINDOW_NORMAL);
-        imshow("Keypoints previous" , image_kpts_previous );
-        imshow("Keypoints current", image_kpts_current );
+        drawKeypoints( image_previous, keypoints_previous, image_kpts_previous, Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+        drawKeypoints( image_current , keypoints_current , image_kpts_current , Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+        namedWindow("Keypoints previous", WINDOW_GUI_EXPANDED);
+        namedWindow("Keypoints current" , WINDOW_GUI_EXPANDED);
+        imshow("Keypoints previous", image_kpts_previous);
+        imshow("Keypoints current" , image_kpts_current );
         waitKey(1);
       }
       // Fazer match de features no geral
-      if (!descriptors_previous.empty() && !descriptors_current.empty())
+      if (!descriptors_previous.empty() && !descriptors_current.empty() && descriptors_previous.rows > 1 && descriptors_current.rows > 1)
         matcher.match(descriptors_previous, descriptors_current, matches);
+
       // Limpar correspondencias tendo nocao da distancia dos keypoints na imagem
       float min_dist = 1000000, max_dist = 0;
       for( int i = 0; i < matches.size(); i++ ){
@@ -152,12 +165,13 @@ public:
           keypoints_filt_current.push_back(keypoints_current[matches[i].trainIdx].pt);
         }
       }
+
       // Filtrando por bins
       filter_bins();
       // Filtrando por coeficiente angular
       filter_lines(ndevs); // Quantos desvios padroes vai ser o limite
 
-      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_previous.size(), keypoints_filt_current.size());
+//      ROS_INFO("Quantos kpts do fim das contas %ld %ld", keypoints_filt_previous.size(), keypoints_filt_current.size());
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
         min_hessian = 0.7*min_hessian;
@@ -178,7 +192,7 @@ public:
       drawMatches( image_previous, keypoints_previous, image_current, keypoints_current, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-      resize(img_matches, img_matches_disp, Size(img_matches.cols/4, img_matches.rows/4));
+      resize(img_matches, img_matches_disp, Size(img_matches.cols/2, img_matches.rows/2));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
       imshow("All Matches", img_matches_disp);
       waitKey(0);
@@ -307,6 +321,10 @@ public:
     _pose = pose;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void get_odometry_msg(nav_msgs::Odometry &msg){
+    msg = odometry;
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////// SETS /////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_visualizar(bool vis){
@@ -374,11 +392,11 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_pose(){
     /// Descricao dos frames da camera e da placa para conversao correta, como se estivesse olhando para a
-    /// parte traseira de ambas:
-    ///     CAMERA              PLACA
-    ///        ^ Y                ^ Z (alt)
-    ///        |                  |
-    ///   X <--o Z         (Pn) Y x--> X (Pe)
+    /// parte traseira de ambas, e do frame inercial ODOM:
+    ///     CAMERA              PLACA                       ODOM
+    ///        ^ Y                ^ Z (alt)                  ^ Z
+    ///        |                  |                          |
+    ///   X <--o Z         (Pn) Y x--> X (Pe)           Y <--x X
     ///
     /// Sendo assim, as leituras dos angulos de rotacao e da translacao vao ser alteradas como esta abaixo:
     /// X = -X[0]         roll:  rod[2], horario      -, antihorario   +    INVERTER SENTIDO para placa!
@@ -386,9 +404,10 @@ public:
     /// Y = -Z[2]         Yaw:   rod[1], para direita -, para esquerda +    Sentido OK
     ///
     // Posicao e acumulada!!
-    pose.dx = -scale_to_real_world*t.at<double>(0, 0);
-    pose.dy = -scale_to_real_world*t.at<double>(2, 0); // [m]
-    pose.dz =  scale_to_real_world*t.at<double>(1, 0);
+    // Filtro contra ruidos e drift em cada leitura
+    pose.dx = (abs(-scale_to_real_world*t.at<double>(0, 0)) > 0.1) ? -scale_to_real_world*t.at<double>(0, 0) : 0;
+    pose.dy = (abs(-scale_to_real_world*t.at<double>(2, 0)) > 0.1) ? -scale_to_real_world*t.at<double>(2, 0) : 0; // [m]
+    pose.dz = (abs( scale_to_real_world*t.at<double>(1, 0)) > 0.1) ?  scale_to_real_world*t.at<double>(1, 0) : 0;
     pose.x += pose.dx;
     pose.y += pose.dy; // [m]
     pose.z += pose.dz;
@@ -397,9 +416,27 @@ public:
     pose.dpitch =  rad2deg(rod.at<double>(0, 0)); // [DEG]
     pose.dyaw   =  rad2deg(rod.at<double>(1, 0));
     // Angulos atuais acumulados - somar com os anteriores
-    pose.roll  += pose.droll;
-    pose.pitch += pose.dpitch; // [DEG]
-    pose.yaw   += pose.dyaw;
+    pose.roll   = bound180( pose.roll  + pose.droll  );
+    pose.pitch  = bound180( pose.pitch + pose.dpitch ); // [DEG]
+    pose.yaw    = bound180( pose.yaw   + pose.dyaw   );
+
+    // Mensagem de odometria para visualizar no frame ODOM
+    update_odometry_msg();
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void update_odometry_msg(){
+    /// Lembranca das conversoes de angulos e posicoes para a mensagem no frame ODOM:
+    /// Isso ocorre apos a conversao para o frame da placa
+    /// Z odom =  Z placa        Angulos devem ser os mesmos
+    /// X odom =  Y placa
+    /// Y odom = -X placa
+    odometry.pose.pose.position.z =  pose.z;
+    odometry.pose.pose.position.x =  pose.y;
+    odometry.pose.pose.position.y = -pose.x;
+    // Calculo do quaternion relativo
+    Quaternion<double> q = AngleAxisd(pose.roll, Vector3d::UnitX()) * AngleAxisd(pose.pitch, Vector3d::UnitY()) * AngleAxisd(pose.yaw, Vector3d::UnitZ());
+    odometry.pose.pose.orientation.x = q.x(); odometry.pose.pose.orientation.y = q.y();
+    odometry.pose.pose.orientation.z = q.z(); odometry.pose.pose.orientation.w = q.w();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////// PRINCIPAL /////////////////////////////////////////////////////
@@ -412,16 +449,18 @@ public:
     F = findFundamentalMat(keypoints_filt_previous, keypoints_filt_current);
     // Calculo da matriz essencial E
     E = camera_matrix.t() * F * camera_matrix;
-    //  Mat E = findEssentialMat(keypoints_filt_left, keypoints_filt_right, camera_matrix, RANSAC, 0.999, 1e-4);
+//    Mat E = findEssentialMat(keypoints_filt_previous, keypoints_filt_current, camera_matrix, RANSAC, 0.999, 1e-4);
     // Obtencao de rotacao e translacao
     inliers = recoverPose(E, keypoints_filt_previous, keypoints_filt_current, camera_matrix, R, t);
-    cout << "Inliers:  " << inliers << " de " << keypoints_filt_previous.size() << endl;
+//    cout << "Inliers:  " << inliers << " de " << keypoints_filt_previous.size() << endl;
     // Ajuste de matrizes de projecao e parametros extrinsecos para a current somente
     set_rt_and_projection_matrix();
     // Angulos de rotacao
     Rodrigues(R, rod);
     // Update das variaveis atuais
     update_pose();
+    cout << "##################################################################\n";
+    cout << "X: " << pose.dx << "\tY: " << pose.dy << "\tZ: " << pose.dz << endl;
     // Vamos salvar o caminho?
     if(vamos_salvar_caminho)
       atualizar_nuvem();
@@ -436,7 +475,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  void salvar_nuvem(string path){
+  void salvar_nuvem(string name){
     if(vamos_salvar_caminho){
       ROS_INFO("Salvando o caminho...");
       // Ver o tempo para diferenciar bags gravadas automaticamente
@@ -448,10 +487,10 @@ public:
       hour    = boost::lexical_cast<std::string>(now->tm_hour);
       minutes = boost::lexical_cast<std::string>(now->tm_min );
       string date = "_" + month + "_" + day + "_" + hour + "h_" + minutes + "m";
-      string filename = "/home/vinicius/visao_ws/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
-      // Salvando com o nome diferenciado
+      string filename = "/home/mrs/visao_ws/src/VISAO/ler_tudo_junto/caminhos/"+name+date+".ply";
+      // Salvando com o nome diferenciado      
       io::savePLYFileASCII(filename, *nuvem);
-      ROS_INFO("Salvo na area de trabalho");
+      ROS_INFO("Salvo na na pasta caminhos!");
       // Visualizar a nuvem com PCL
       visualizar_nuvem();
     } else {
@@ -481,6 +520,13 @@ private:
     vis_im->spin();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  double bound180(double angle){
+    if(angle >  180.0) angle = (angle - 360.0);
+    if(angle < -180.0) angle = (angle + 360.0);
+
+    return angle;
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /// Variaveis privadas
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   bool visualizar; // Visualizar as etapas das imagens
@@ -504,6 +550,8 @@ private:
 
   PointCloud<PointXYZRGBNormal>::Ptr nuvem; // Caminho
   PointXYZRGBNormal point; // Ponto atual para a nuvem
+
+  nav_msgs::Odometry odometry; // Mensagem a ser enviada no frame inercial ODOM
 
   int M; // Quantos quadrados no eixo  X (columns)
   int N; // Quantos quadrados no eixo -Y (rows)

@@ -140,14 +140,14 @@ public:
           keypoints_filt_right.push_back(keypoints_right[matches[i].trainIdx].pt);
         }
       }
-      ROS_INFO("Antes dos filtros              %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      ROS_INFO("Antes dos filtros              %ld %ld", keypoints_filt_left.size(), keypoints_filt_right.size());
       // Filtrando por bins
       filter_bins(image_left, keypoints_filt_left, keypoints_filt_right, better_matches);
       // Filtrando por coeficiente angular
-      ROS_INFO("Apos filtro bins               %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      ROS_INFO("Apos filtro bins               %ld %ld", keypoints_filt_left.size(), keypoints_filt_right.size());
       filter_lines(image_left, 1.0f, keypoints_filt_left, keypoints_filt_right, better_matches);
 
-      ROS_INFO("Quantos kpts do fim das contas %d %d", keypoints_filt_left.size(), keypoints_filt_right.size());
+      ROS_INFO("Quantos kpts do fim das contas %ld %ld", keypoints_filt_left.size(), keypoints_filt_right.size());
       ROS_INFO("Threshold para descritor: %.2f", min_hessian);
       // Limpando para proxima iteracao, se existir
       if(better_matches.size() < min_matches){
@@ -169,7 +169,7 @@ public:
       drawMatches( image_left, keypoints_left, image_right, keypoints_right, better_matches, img_matches,
                    Scalar::all(-1), Scalar::all(-1),
                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-      resize(img_matches, img_matches_disp, Size(img_matches.cols/6, img_matches.rows/6));
+      resize(img_matches, img_matches_disp, Size(img_matches.cols, img_matches.rows));
       namedWindow("All matches", WINDOW_GUI_EXPANDED);
       imshow("All Matches", img_matches_disp);
       waitKey(0);

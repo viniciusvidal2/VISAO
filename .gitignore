@@ -1,4 +1,6 @@
 register/ptclouds/*.ply
 register/transformador_clouds/*.ply
 register/laboratorio_clouds/*.ply
+acumular_zed/ptclouds/*.ply
+acumular_zed/bags/*.bag
 *.autosave

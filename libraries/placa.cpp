@@ -96,7 +96,7 @@ public:
       string filename = "/home/vinicius/visao_ws/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
       // Salvando com o nome diferenciado
       io::savePLYFileASCII(filename, *nuvem);
-      ROS_INFO("Salvo na area de trabalho");
+      ROS_INFO("Salvo na pasta caminhos!");
       // Visualizar a nuvem com PCL
       visualizar_nuvem();
     } else {
