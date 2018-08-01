@@ -1,16 +1,16 @@
 <launch>
 
-    <arg name="bag" default=""/>
-    <arg name="local" default=""/>
+    <arg name="bag" default="viagem_5_1.bag"/>
+    <arg name="folder" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
     <arg name="only_raw_data" default="false"/>
 
     <group if="$(arg only_raw_data)">
-        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position_local /zed/left/image_rect_color /zed/right/image_rect_color /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
+        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position/local /zed/left/image_rect_color /zed/left/image_raw_color /zed/right/image_rect_color /zed/right/image_raw_color /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
         </node>
     </group>
 
     <group unless="$(arg only_raw_data)">
-        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position_local /zed/left/image_rect_color/compressed /zed/right/image_rect_color/compressed /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
+        <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="/mavros/global_position/local /zed/left/image_rect_color/compressed /zed/left/image_raw_color/compressed /zed/right/image_rect_color/compressed /zed/right/image_raw_color/compressed /zed/point_cloud/cloud_registered /zed/odom /zed/imu/data -O $(arg folder)/$(arg bag)">
         </node>
     </group>
 

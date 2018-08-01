@@ -2,13 +2,12 @@
 
     <arg name="placa"  default="false"/>
     <arg name="zed"    default="false"/>
-    <arg name="imagem" default="false"/>
     <arg name="resolution" default="2"/>
-    <arg name="frame_rate" default="30"/>
+    <arg name="frame_rate" default="10"/>
     <arg name="processar" default="true"/>
     <arg name="gravar" default="false"/>
     <arg name="bag" default=""/>
-    <arg name="local" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
+    <arg name="folder" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
 
 
 
@@ -35,7 +34,7 @@
     <group if="$(arg gravar)">
         <include file="$(find ler_tudo_junto)/launch/gravar.launch">
             <param name="bag" value="$(arg bag)"/>
-            <param name="local" value="$(arg local)"/>
+            <param name="folder" value="$(arg folder)"/>
         </include>
     </group>
 

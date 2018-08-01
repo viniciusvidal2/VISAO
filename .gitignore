@@ -3,4 +3,5 @@ register/transformador_clouds/*.ply
 register/laboratorio_clouds/*.ply
 acumular_zed/ptclouds/*.ply
 acumular_zed/bags/*.bag
+ler_tudo_junto/bags/*.bag
 *.autosave

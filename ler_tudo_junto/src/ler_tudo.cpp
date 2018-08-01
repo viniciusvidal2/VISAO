@@ -62,7 +62,7 @@ typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 double roll, pitch, yaw, roll2, pitch2, yaw2; // Leituras de angulos da placa [RAD]
 double R2D = 180.0/M_PI; // Conversao
-bool so_sensores = false, so_imagem = true, so_zed = false; // Flags de controle
+bool so_sensores = true, so_imagem = false, so_zed = false; // Flags de controle
 bool primeira_vez = true;
 
 ros::Subscriber subodo_, subima_, subzed_; // Subscribers para dados em separado
@@ -324,7 +324,7 @@ int main(int argc, char **argv)
   ros::ServiceClient srv = nh.serviceClient<mavros_msgs::StreamRate>("/mavros/set_stream_rate");
   mavros_msgs::StreamRate rate;
   rate.request.stream_id = 0;
-  rate.request.message_rate = 10; // X Hz das mensagens que vem
+  rate.request.message_rate = 5; // X Hz das mensagens que vem
   rate.request.on_off = 1; // Nao sei
   if(srv.call(rate))
     ROS_INFO("Taxa do mavros mudada para %d Hz", rate.request.message_rate);
