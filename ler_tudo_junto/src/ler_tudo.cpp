@@ -55,14 +55,15 @@ using namespace nav_msgs;
 using namespace geometry_msgs;
 using namespace sensor_msgs;
 
-typedef sync_policies::ApproximateTime<Odometry, Image> syncPolicy;
+typedef sync_policies::ApproximateTime<Odometry, Image>    syncPolicy ;
+typedef sync_policies::ApproximateTime<Odometry, Odometry> syncPolicy2;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Variaveis globais
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 double roll, pitch, yaw, roll2, pitch2, yaw2; // Leituras de angulos da placa [RAD]
 double R2D = 180.0/M_PI; // Conversao
-bool so_sensores = true, so_imagem = false, so_zed = false; // Flags de controle
+int modo = 2; // Flag de controle
 bool primeira_vez = true;
 
 ros::Subscriber subodo_, subima_, subzed_; // Subscribers para dados em separado
@@ -312,6 +313,62 @@ void so_zed_cb(const nav_msgs::OdometryConstPtr& odo){
   } // Fim do pipeline
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs::OdometryConstPtr& zed_msg){
+  /////////////////// ----- PLACA ----- ///////////////////
+  /// Angulos atuais
+  /// Angulos atuais [RAD]
+  /// YAW:   eixo Z para cima da placa, sentido anti-horario positivo, 0 para leste, 180 em oeste, de -180 a 180
+  /// ROLL:  eixo X para a frente da placa, sentido horario e positivo, -180 a 180, 0 na horizontal
+  /// PITCH: eixo Y para a esquerda da placa, sentido mao direita, bico pra baixo positivo, empinada negativa, -90 a 90 (nao da uma volta)
+  tf::Quaternion qplaca(placa_msg->pose.pose.orientation.x, placa_msg->pose.pose.orientation.y, placa_msg->pose.pose.orientation.z, placa_msg->pose.pose.orientation.w);
+  tf::Matrix3x3 mplaca(qplaca);
+  mplaca.getRPY(roll, pitch, yaw);
+  pose_leitura_placa.roll = rad2deg(roll); pose_leitura_placa.pitch = rad2deg(pitch); pose_leitura_placa.yaw = rad2deg(yaw); // [DEG]
+  /// Posicao
+  /// Posicao ENU [m]
+  /// PN: Posicao norte, Y da mensagem, cresce para norte do mapa
+  /// PE: Posicao leste, X da mensagem, cresce para leste do mapa
+  /// PZ: Posicao vertical, Z da mensagem, cresce para cima
+  pose_leitura_placa.y = placa_msg->pose.pose.position.y;
+  pose_leitura_placa.x = placa_msg->pose.pose.position.x;
+  pose_leitura_placa.z = placa_msg->pose.pose.position.z;
+  /////////////////// ----- ZED ----- ///////////////////
+  /// Angulos atuais [RAD]
+  /// YAW:   eixo Z para cima da ZED, sentido anti-horario positivo, 0 no inicio da movimentacao
+  /// ROLL:  eixo X para a frente da ZED, sentido horario e positivo, 0 no inicio da movimentacao
+  /// PITCH: eixo Y para a esquerda da ZED, sentido horario e positivo, bico pra baixo positivo, empinada negativa, 0 no inicio da movimentacao
+  tf::Quaternion qzed(zed_msg->pose.pose.orientation.x, zed_msg->pose.pose.orientation.y, zed_msg->pose.pose.orientation.z, zed_msg->pose.pose.orientation.w);
+  tf::Matrix3x3 mzed(qzed);
+  mzed.getRPY(roll2, pitch2, yaw2);
+  pose_leitura_zed.roll = rad2deg(roll2); pose_leitura_zed.pitch = rad2deg(pitch2); pose_leitura_zed.yaw = rad2deg(yaw2); // [DEG]
+  /// Posicao Body Frame [m]
+  /// X: para frente da ZED
+  /// Y: para esquerda da ZED
+  /// Z: para cima da ZED
+  pose_leitura_zed.x = zed_msg->pose.pose.position.x;
+  pose_leitura_zed.y = zed_msg->pose.pose.position.y;
+  pose_leitura_zed.z = zed_msg->pose.pose.position.z;
+  /////////////////// ----- PRIMEIRA VEZ ----- ///////////////////
+  if(primeira_vez){
+    // Iniciar PLACA
+    placa.init();
+    // Preencher a previous com o que vier
+    placa.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS
+    // Salvar a nuvem apos tantas iteracoes?
+    placa.set_salvar_caminho(true);
+    // Iniciar ZED
+    zed.init();
+    // Preencher a previous com o que vier
+    zed.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS com leitura da PLACA de uma vez para iniciar a estimativa
+    // Salvar a nuvem apos tantas iteracoes?
+    zed.set_salvar_caminho(true);
+    // Ja foi a primeira vez, virar o flag
+    primeira_vez = false;
+  } else {
+  /////////////////// ----- PIPELINE ----- ///////////////////
+  }
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "ler_tudo");
@@ -349,24 +406,42 @@ int main(int argc, char **argv)
   init_pose(pose_filtro_imagem);
   init_pose(pose_leitura_zed);
 
-  // Subscribers para ler sincronizadas as informacoes
-  if(!so_sensores && !so_imagem && !so_zed){
+
+  switch(modo){
+  case 1:
+    // Subscribers para ler sincronizadas as informacoes
     message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
     message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_raw_color"   , 100);
     // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
     Synchronizer<syncPolicy> sync(syncPolicy(100), subodo, subima);
     sync.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
-  }
-  // Subscriber para ler so a placa com a mensagem de pose
-  if(so_sensores)
+    break;
+
+  case 2:
+    // Subscriber para pose vindas da placa e da ZED - melhor ideia ate o momento
+    message_filters::Subscriber<Odometry> subplaca(nh, "/mavros/global_position/local", 100);
+    message_filters::Subscriber<Odometry> subzed(  nh, "/zed/odometjvslhkfjvdzkjnvkjdsnvjkd"   , 100);
+    // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
+    Synchronizer<syncPolicy2> sync(syncPolicy2(100), subplaca, subzed);
+    sync.registerCallback(boost::bind(&placa_e_zed_cb, _1, _2));
+    break;
+
+  case 3:
+    // Subscriber para ler so a placa com a mensagem de pose
     subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa_cb );
-  // Subscriber para ler so o topico de imagens
-  if(so_imagem){
+    break;
+
+  case 4:
+    // Subscriber para ler so o topico de imagens
     subima_ = nh.subscribe("/zed/left/image_raw_color"   , 100, so_imagem_cb);
     pub_im_odo = nh.advertise<Odometry>("/so_imagem/odom", 100);
-  }
-  if(so_zed)
+    break;
+
+  case 5:
+    // Subscriber para ler so a camera ZED
     subzed_ = nh.subscribe("/zed/odom"                    , 100, so_zed_cb   );
+    break;
+  }
 
   ros::spin();
 
