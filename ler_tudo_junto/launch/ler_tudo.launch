@@ -6,8 +6,10 @@
     <arg name="frame_rate" default="10"/>
     <arg name="processar" default="true"/>
     <arg name="gravar" default="false"/>
-    <arg name="bag" default=""/>
+    <arg name="playback" default="true"/>
+    <arg name="bag" default="viagem_5_1.bag"/>
     <arg name="folder" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
+    <arg name="rviz" default="true"/>
 
 
 
@@ -24,6 +26,17 @@
         </include>
     </group>
 
+    <!--Se for tocar algum bag ja gravado aqui-->
+    <group if="$(arg playback)">
+        <include file="$(find ler_tudo_junto)/launch/playback.launch">
+            <param name="bag" value="$(arg bag)"/>
+            <param name="folder" value="$(arg folder)"/>
+        </include>
+    </group>
+
+    <!--Transformada entre map onde estao todos e zed_left_optical da ptcloud-->
+    <node pkg="tf" type="static_transform_publisher" name="zed_to_map" args="0 0 0 0 0 0 zed_left_camera_frame map 30"/>
+
     <!--Aqui o no principal a partir das dependencias-->
     <group if="$(arg processar)">
         <node name="ler_tudo_node" pkg="ler_tudo_junto" type="ler_tudo_junto_node" output="screen">
@@ -36,6 +49,12 @@
             <param name="bag" value="$(arg bag)"/>
             <param name="folder" value="$(arg folder)"/>
         </include>
+    </group>
+
+    <!--Se vamos visualizar no RVIZ-->
+    <group if="$(arg rviz)">
+        <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-f map -d $(find ler_tudo_junto)/resources/visual.rviz">
+        </node>
     </group>
 
 </launch>

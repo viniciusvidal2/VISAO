@@ -28,11 +28,13 @@ public:
   void init(){
     // Iniciar pose atual
     pose.x     = 0; pose.y      = 0; pose.z    = 0;
+    pose.e     = 0; pose.n      = 0; pose.u    = 0;
     pose.dx    = 0; pose.dy     = 0; pose.dz   = 0;
     pose.roll  = 0; pose.pitch  = 0; pose.yaw  = 0;
     pose.droll = 0; pose.dpitch = 0; pose.dyaw = 0;
     // Iniciar pose anterior
     pose_previous.x     = 0; pose_previous.y      = 0; pose_previous.z    = 0;
+    pose_previous.e     = 0; pose_previous.n      = 0; pose_previous.u    = 0;
     pose_previous.dx    = 0; pose_previous.dy     = 0; pose_previous.dz   = 0;
     pose_previous.roll  = 0; pose_previous.pitch  = 0; pose_previous.yaw  = 0;
     pose_previous.droll = 0; pose_previous.dpitch = 0; pose_previous.dyaw = 0;
@@ -63,13 +65,18 @@ public:
     /// X, Y, Z, ROLL, PITCH, YAW
     /// Calcular as diferencas abaixo considerando sentidos ja estabelecidos
     // Diferencas de posicao
-    pose.dx = pose.x - pose_previous.x;
-    pose.dy = pose.y - pose_previous.y;
-    pose.dz = pose.z - pose_previous.z;
+    pose.dx = pose.e - pose_previous.e;
+    pose.dy = pose.n - pose_previous.n;
+    pose.dz = pose.u - pose_previous.u;
     // Diferencas de angulo [DEGREES] - CONSIDERAR WRAP180
     pose.droll  = wrap180(pose.roll , pose_previous.roll );
     pose.dpitch = wrap180(pose.pitch, pose_previous.pitch);
     pose.dyaw   = wrap180(pose.yaw  , pose_previous.yaw  );
+    // Printar estado atual
+    if(true){
+      cout << "\n########### PLACA\n";
+      cout << "E: " << pose.e << "\tN: " << pose.n << "\tU: " << pose.u << endl;
+    }
     // Repassar resultado para o script principal
     _pose = pose;
     // Preparar para proxima iteracao: atual->previous
@@ -93,7 +100,7 @@ public:
       hour    = boost::lexical_cast<std::string>(now->tm_hour);
       minutes = boost::lexical_cast<std::string>(now->tm_min );
       string date = "_" + month + "_" + day + "_" + hour + "h_" + minutes + "m";
-      string filename = "/home/vinicius/visao_ws/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
+      string filename = "/home/vinicius/visao_ws/src/VISAO/ler_tudo_junto/caminhos/"+path+date+".ply";
       // Salvando com o nome diferenciado
       io::savePLYFileASCII(filename, *nuvem);
       ROS_INFO("Salvo na pasta caminhos!");
@@ -118,10 +125,10 @@ private:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void atualizar_nuvem(){
     // Preenchendo o ponto com dados atuais
-    point.x        = pose.x;
-    point.y        = pose.y;
-    point.z        = pose.z;
-    point.r = 250.0f; point.g = 250.0f; point.b = 250.0f;
+    point.x        = pose.e;
+    point.y        = pose.n;
+    point.z        = pose.u;
+    point.r = 250.0f; point.g = 250.0f; point.b = 250.0f; // BRANCO por ser mais OK
     point.normal_x = pose.roll;
     point.normal_y = pose.pitch;
     point.normal_z = pose.yaw;
@@ -130,8 +137,8 @@ private:
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualizar_nuvem(){
-    boost::shared_ptr<PCLVisualizer> vis_placa (new PCLVisualizer("caminho"));
-    vis_placa->addPointCloud<PointXYZRGBNormal>(nuvem, "caminho");
+    boost::shared_ptr<PCLVisualizer> vis_placa (new PCLVisualizer("caminho placa"));
+    vis_placa->addPointCloud<PointXYZRGBNormal>(nuvem, "caminho placa");
     vis_placa->spin();
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////

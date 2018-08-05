@@ -6,6 +6,9 @@ struct Pose_atual{
   double x;
   double y;      // [m]
   double z;
+  double e;
+  double n;      // [m]
+  double u;
   double dx;
   double dy;     // [m]
   double dz;

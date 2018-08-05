@@ -63,8 +63,7 @@ typedef sync_policies::ApproximateTime<Odometry, Odometry> syncPolicy2;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 double roll, pitch, yaw, roll2, pitch2, yaw2; // Leituras de angulos da placa [RAD]
 double R2D = 180.0/M_PI; // Conversao
-int modo = 2; // Flag de controle
-bool primeira_vez = true;
+bool primeira_vez = true; // SEMPRE comecamos na primeira vez
 
 ros::Subscriber subodo_, subima_, subzed_; // Subscribers para dados em separado
 ros::Publisher pub_im_odo; // Para enviar a odometria vinda so da imagem
@@ -74,9 +73,10 @@ Odometry imagem_odometry_msg;
 Imagem2 im; // Objeto de tratamento da imagem
 
 Placa placa; // Objeto de tratamento da placa
+ros::Publisher pub_placa_odo; // Odometria vinda da placa
 
 ZED zed; // Objeto de tratamento da ZED
-ros::ServiceClient iniciar_pose_leitura_zed;
+ros::Publisher pub_zed_odo; // Odometria calculada e ajustada da ZED
 
 Pose_atual pose_leitura_placa; // Poses referentes a placa
 Pose_atual pose_filtro_placa;
@@ -85,7 +85,7 @@ Pose_atual pose_filtro_imagem;
 Pose_atual pose_leitura_zed; // Pose de leitura da zed, vamos ver
 Pose_atual pose_filtro_zed;
 
-int contador = 0, contador2 = 0, amostras = 1000; // Conta quantas iteracoes passam que dai salvamos ou nao
+int contador = 0, contador2 = 0, amostras = 48; // Conta quantas iteracoes passam que dai salvamos ou nao
 
 double min_hessian = 11000; // Threshold inicial de achar keypoints
 int min_matches = 10; // Numero minimo de matches entre imagens
@@ -93,30 +93,9 @@ float rate_min_dist = 3.0f, ndevs = 1.5f; // Controle de filtragem
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Matematica retirada de:
-/// https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-//void toEulerAngle(Quaternion<double> q, double& roll, double& pitch, double& yaw)
-//{
-//  // roll (x-axis rotation)
-//  double sinr = 2.0*(q.w*q.x + q.y*q.z);
-//  double cosr = 1.0 - 2.0*(q.x*q.x + q.y*q.y);
-//  roll = atan2(sinr, cosr);
-
-//  // pitch (y-axis rotation)
-//  double sinp = 2.0*(q.w*q.y - q.z*q.x);
-//  if (fabs(sinp) >= 1)
-//    pitch = copysign(M_PI/2, sinp); // use 90 degrees if out of range
-//  else
-//    pitch = asin(sinp);
-
-//  // yaw (z-axis rotation)
-//  double siny = 2.0*(q.w*q.z + q.x*q.y);
-//  double cosy = 1.0 - 2.0*(q.y*q.y + q.z*q.z);
-//  yaw = atan2(siny, cosy);
-//}
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
 void init_pose(Pose_atual &_pose){
   _pose.x     = 0; _pose.y      = 0; _pose.z    = 0;
+  _pose.e     = 0; _pose.n      = 0; _pose.u    = 0;
   _pose.dx    = 0; _pose.dy     = 0; _pose.dz   = 0;
   _pose.roll  = 0; _pose.pitch  = 0; _pose.yaw  = 0;
   _pose.droll = 0; _pose.dpitch = 0; _pose.dyaw = 0;
@@ -297,10 +276,12 @@ void so_zed_cb(const nav_msgs::OdometryConstPtr& odo){
   } else {
 
     if(contador2 <= amostras){
+      // Pose vazia quando so a zed esta funcionando
+      Odometry msg_dull;
       // Setar a pose atual com as leituras
       zed.set_pose(pose_leitura_zed, 1); // Salvando na leitura atual
       // Calcular com o pipeline e pegar a pose com diferencas
-      zed.process_and_return(pose_filtro_zed);
+      zed.process_and_return(pose_filtro_zed, msg_dull);
       // Atualiza contador
       contador2++;
     } else {
@@ -329,9 +310,9 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
   /// PN: Posicao norte, Y da mensagem, cresce para norte do mapa
   /// PE: Posicao leste, X da mensagem, cresce para leste do mapa
   /// PZ: Posicao vertical, Z da mensagem, cresce para cima
-  pose_leitura_placa.y = placa_msg->pose.pose.position.y;
-  pose_leitura_placa.x = placa_msg->pose.pose.position.x;
-  pose_leitura_placa.z = placa_msg->pose.pose.position.z;
+  pose_leitura_placa.n = placa_msg->pose.pose.position.y;
+  pose_leitura_placa.e = placa_msg->pose.pose.position.x;
+  pose_leitura_placa.u = placa_msg->pose.pose.position.z;
   /////////////////// ----- ZED ----- ///////////////////
   /// Angulos atuais [RAD]
   /// YAW:   eixo Z para cima da ZED, sentido anti-horario positivo, 0 no inicio da movimentacao
@@ -343,11 +324,16 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
   pose_leitura_zed.roll = rad2deg(roll2); pose_leitura_zed.pitch = rad2deg(pitch2); pose_leitura_zed.yaw = rad2deg(yaw2); // [DEG]
   /// Posicao Body Frame [m]
   /// X: para frente da ZED
-  /// Y: para esquerda da ZED
-  /// Z: para cima da ZED
+  /// Y: para esquerda da ZED                  Valores no frame da camera, serao transformados para o frame ENU da placa
+  /// Z: para cima da ZED                      dentro da classe. Valores ds calculados a partir do previous
   pose_leitura_zed.x = zed_msg->pose.pose.position.x;
   pose_leitura_zed.y = zed_msg->pose.pose.position.y;
   pose_leitura_zed.z = zed_msg->pose.pose.position.z;
+
+  // Mensagens de odometria para confirmar no RVIZ
+  Odometry msg_placa_odo;
+  Odometry msg_zed_odo;
+
   /////////////////// ----- PRIMEIRA VEZ ----- ///////////////////
   if(primeira_vez){
     // Iniciar PLACA
@@ -359,13 +345,47 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
     // Iniciar ZED
     zed.init();
     // Preencher a previous com o que vier
-    zed.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS com leitura da PLACA de uma vez para iniciar a estimativa
+    zed.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS e na OFFSET com leitura da PLACA de uma vez para iniciar a estimativa
     // Salvar a nuvem apos tantas iteracoes?
     zed.set_salvar_caminho(true);
+    // Atualizar contador
+    contador++;
     // Ja foi a primeira vez, virar o flag
     primeira_vez = false;
   } else {
   /////////////////// ----- PIPELINE ----- ///////////////////
+    if(contador <= amostras){
+      // Setar a pose atual com as leituras
+      placa.set_pose(pose_leitura_placa, 1); // Salvando na leitura atual
+      // Calcular com o pipeline e pegar a pose com diferencas
+      placa.process_and_return(pose_filtro_placa);
+      // A mensagem da placa ja e a pose definitiva, copia para enviar
+      msg_placa_odo = *placa_msg;
+      // Setar a pose atual com as leituras
+      zed.set_pose(pose_leitura_zed, 1); // Salvando na leitura atual
+      // Calcular com o pipeline e pegar a pose com diferencas e a mensagem de odometria
+      zed.process_and_return(pose_filtro_zed, msg_zed_odo);
+      // Publicar as duas poses para vefiricar no rviz
+      msg_zed_odo.header.frame_id = msg_placa_odo.header.frame_id;
+      msg_zed_odo.header.stamp    = msg_placa_odo.header.stamp;
+//      msg_zed_odo = *zed_msg;
+      pub_placa_odo.publish(msg_placa_odo);
+      pub_zed_odo.publish(msg_zed_odo);
+      // Atualiza contador
+      contador++;
+      cout << "\nIteracao: " << contador << endl;
+      ////////////// AQUI ENTRA O FILTRO DE KALMAN
+
+
+    } else {
+      // Salvar se foi setado para tal
+      string nome = "zed";
+      zed.salvar_nuvem(nome);
+      nome = "placa";
+      placa.salvar_nuvem(nome);
+
+      ros::shutdown();
+    }
   }
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -406,42 +426,37 @@ int main(int argc, char **argv)
   init_pose(pose_filtro_imagem);
   init_pose(pose_leitura_zed);
 
+  /// ------------ Odometria da placa e Imagem da ZED ------------- ///
+  /// ------------------------------------------------------------- ///
+//  message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
+//  message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_raw_color"    , 100);
+//  // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
+//  Synchronizer<syncPolicy> sync1(syncPolicy(100), subodo, subima);
+//  sync1.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
 
-  switch(modo){
-  case 1:
-    // Subscribers para ler sincronizadas as informacoes
-    message_filters::Subscriber<Odometry> subodo(nh, "/mavros/global_position/local", 100);
-    message_filters::Subscriber<Image>    subima(nh, "/zed/left/image_raw_color"   , 100);
-    // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
-    Synchronizer<syncPolicy> sync(syncPolicy(100), subodo, subima);
-    sync.registerCallback(boost::bind(&informacoes_sincronizadas, _1, _2));
-    break;
+  /// ------------ Odometria da placa e Odometria da ZED ---------- ///
+  /// --------------------------- AQUI!!--------------------------- ///
+  message_filters::Subscriber<Odometry> subplaca(nh, "/mavros/global_position/local", 100);
+  message_filters::Subscriber<Odometry> subzed(  nh, "/zed/odom"                    , 100);
+  // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
+  Synchronizer<syncPolicy2> sync2(syncPolicy2(100), subplaca, subzed);
+  sync2.registerCallback(boost::bind(&placa_e_zed_cb, _1, _2));
+  pub_placa_odo = nh.advertise<Odometry>("/odometria_da_placa", 100);
+  pub_zed_odo   = nh.advertise<Odometry>("/odometria_da_zed"  , 100);
 
-  case 2:
-    // Subscriber para pose vindas da placa e da ZED - melhor ideia ate o momento
-    message_filters::Subscriber<Odometry> subplaca(nh, "/mavros/global_position/local", 100);
-    message_filters::Subscriber<Odometry> subzed(  nh, "/zed/odometjvslhkfjvdzkjnvkjdsnvjkd"   , 100);
-    // Sincroniza as leituras dos topicos (sensores e imagem a principio) em um so callback
-    Synchronizer<syncPolicy2> sync(syncPolicy2(100), subplaca, subzed);
-    sync.registerCallback(boost::bind(&placa_e_zed_cb, _1, _2));
-    break;
+  /// ----------------------- Somente a placa --------------------- ///
+  /// ------------------------------------------------------------- ///
+//  subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa_cb );
 
-  case 3:
-    // Subscriber para ler so a placa com a mensagem de pose
-    subodo_ = nh.subscribe("/mavros/global_position/local", 100, so_placa_cb );
-    break;
+  /// ------------------ Somente imagem da camera ----------------- ///
+  /// ------------------------------------------------------------- ///
+//  subima_ = nh.subscribe("/zed/left/image_raw_color"   , 100, so_imagem_cb);
+//  pub_im_odo = nh.advertise<Odometry>("/so_imagem/odom", 100);
 
-  case 4:
-    // Subscriber para ler so o topico de imagens
-    subima_ = nh.subscribe("/zed/left/image_raw_color"   , 100, so_imagem_cb);
-    pub_im_odo = nh.advertise<Odometry>("/so_imagem/odom", 100);
-    break;
+  /// ------------------ Somente a ZED odometria ------------------ ///
+  /// ------------------------------------------------------------- ///
+//  subzed_ = nh.subscribe("/zed/odom"                    , 100, so_zed_cb   );
 
-  case 5:
-    // Subscriber para ler so a camera ZED
-    subzed_ = nh.subscribe("/zed/odom"                    , 100, so_zed_cb   );
-    break;
-  }
 
   ros::spin();
 
