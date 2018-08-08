@@ -45,6 +45,7 @@
 #include "../../libraries/imagem2.cpp"
 #include "../../libraries/placa.cpp"
 #include "../../libraries/zed.cpp"
+#include "../../libraries/kalman_simples.cpp"
 #include "../../libraries/pose.h"
 
 using namespace std;
@@ -84,6 +85,8 @@ Pose_atual pose_leitura_imagem; // Poses referentes a imagem
 Pose_atual pose_filtro_imagem;
 Pose_atual pose_leitura_zed; // Pose de leitura da zed, vamos ver
 Pose_atual pose_filtro_zed;
+
+Kalman_simples kalman; // Kalman simples que vai agir sobre posicao leste E para teste
 
 int contador = 0, contador2 = 0, amostras = 48; // Conta quantas iteracoes passam que dai salvamos ou nao
 
@@ -348,6 +351,8 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
     zed.set_pose(pose_leitura_placa, 0); // Salvando na PREVIOUS e na OFFSET com leitura da PLACA de uma vez para iniciar a estimativa
     // Salvar a nuvem apos tantas iteracoes?
     zed.set_salvar_caminho(true);
+    // Iniciar o kalman simples
+//    kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, placa_msg->pose.covariance.at(0), pose_leitura_placa.x);
     // Atualizar contador
     contador++;
     // Ja foi a primeira vez, virar o flag
