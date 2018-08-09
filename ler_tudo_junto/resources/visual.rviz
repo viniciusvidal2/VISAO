@@ -9,7 +9,6 @@ Panels:
         - /Odometry1
         - /Odometry2
         - /PointCloud21
-        - /PointCloud21/Status1
       Splitter Ratio: 0.461095095
     Tree Height: 565
   - Class: rviz/Selection
@@ -30,7 +29,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -70,7 +69,7 @@ Visualization Manager:
           Value: true
         Value: false
       Enabled: true
-      Keep: 5
+      Keep: 50
       Name: Odometry
       Position Tolerance: 0.100000001
       Shape:
@@ -104,7 +103,7 @@ Visualization Manager:
           Value: true
         Value: false
       Enabled: true
-      Keep: 5
+      Keep: 50
       Name: Odometry
       Position Tolerance: 0.100000001
       Shape:
@@ -132,7 +131,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -149,12 +148,12 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: zed_left_camera_frame
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -175,7 +174,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 127.668343
+      Distance: 7314.03516
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
