@@ -89,8 +89,8 @@ public:
     pose.x -= pose_offset_ZED.x; pose.y -= pose_offset_ZED.y; pose.z -= pose_offset_ZED.z;
     pose.roll -= pose_offset_ZED.roll; pose.pitch -= pose_offset_ZED.pitch; pose.yaw -= pose_offset_ZED.yaw;
     // Rotacao a partir do offset de yaw inicial - x => E, y => N
-    pose.e = pose.x; //pose.x*cos(deg2rad(pose_offset_placa.yaw)) - pose.y*sin(deg2rad(pose_offset_placa.yaw));
-    pose.n = pose.y; //pose.x*sin(deg2rad(pose_offset_placa.yaw)) + pose.y*cos(deg2rad(pose_offset_placa.yaw));
+    pose.e = pose.x*cos(deg2rad(pose_offset_placa.yaw)) - pose.y*sin(deg2rad(pose_offset_placa.yaw));
+    pose.n = pose.x*sin(deg2rad(pose_offset_placa.yaw)) + pose.y*cos(deg2rad(pose_offset_placa.yaw));
     pose.u = pose.z;
     // Adicao da translacao do offset ENU (primeira mensagem da placa)
     pose.e += pose_offset_placa.e;
@@ -186,9 +186,9 @@ private:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void atualizar_nuvem(){
     // Preenchendo o ponto com dados atuais
-    point.x        = pose.x;
-    point.y        = pose.y;
-    point.z        = pose.z;
+    point.x        = pose.e;
+    point.y        = pose.n;
+    point.z        = pose.u;
     point.r = 250.0f; point.g = 0.0f; point.b = 0.0f; // VERMELHO porque nao esta tao bacana
     point.normal_x = pose.roll;
     point.normal_y = pose.pitch;
