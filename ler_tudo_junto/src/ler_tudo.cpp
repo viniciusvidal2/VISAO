@@ -88,7 +88,7 @@ Pose_atual pose_filtro_zed;
 
 Kalman_simples kalman; // Kalman simples que vai agir sobre posicao leste E para teste
 
-int contador = 0, contador2 = 0, amostras = 730; // Conta quantas iteracoes passam que dai salvamos ou nao
+int contador = 0, contador2 = 0, amostras = 100; // Conta quantas iteracoes passam que dai salvamos ou nao
 
 double min_hessian = 11000; // Threshold inicial de achar keypoints
 int min_matches = 10; // Numero minimo de matches entre imagens
@@ -353,7 +353,9 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
     // Salvar a nuvem apos tantas iteracoes?
     zed.set_salvar_caminho(true);
     // Iniciar o kalman simples
-//    kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, placa_msg->pose.covariance.at(0), pose_leitura_placa.x);
+    kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, 0.5, pose_leitura_placa.x);
+    // Salvar a nuvem apos tantas iteracoes?
+    kalman.set_salvar_caminho(true);
     // Atualizar contador
     contador++;
     // Ja foi a primeira vez, virar o flag
@@ -371,6 +373,10 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
       zed.set_pose(pose_leitura_zed, 1); // Salvando na leitura atual
       // Calcular com o pipeline e pegar a pose com diferencas e a mensagem de odometria
       zed.process_and_return(pose_filtro_zed, msg_zed_odo);
+
+      ////////////// AQUI ENTRA O FILTRO DE KALMAN //////////////
+      kalman.filter(pose_filtro_zed.dx, pose_filtro_placa.e, msg_placa_odo.pose.covariance.at(0));
+
       // Publicar as duas poses para vefiricar no rviz
       msg_zed_odo.header.frame_id = msg_placa_odo.header.frame_id;
       msg_zed_odo.header.stamp    = msg_placa_odo.header.stamp;
@@ -380,8 +386,6 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
       // Atualiza contador
       contador++;
       cout << "\nIteracao: " << contador << endl;
-      ////////////// AQUI ENTRA O FILTRO DE KALMAN
-
 
     } else {
       // Salvar se foi setado para tal
@@ -389,6 +393,8 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
       zed.salvar_nuvem(nome);
       nome = "placa";
       placa.salvar_nuvem(nome);
+      nome = "kalman_simples";
+      kalman.salvar_nuvem(nome);
 
       ros::shutdown();
     }

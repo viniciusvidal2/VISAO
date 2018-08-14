@@ -54,6 +54,8 @@ public:
     pose_offset_placa.droll   = 0; pose_offset_placa.dpitch   = 0; pose_offset_placa.dyaw   = 0;
     // Por default nao queremos salvar a nuvem
     vamos_salvar_nuvem = false;
+    // Decaimento
+    decaimento_bussola = 15.0;
     // Inicio da nuvem
     nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
   }
@@ -66,6 +68,7 @@ public:
     } else if(code == 0){ // Aqui atualizamos a pose previous e a offset com a POSE DA PLACA
       pose_previous     = _pose;
       pose_offset_placa = _pose;
+      pose_offset_placa.yaw += decaimento_bussola; // Guardar o decaimento observado na pratica
     } else if(code == 2){
       pose_offset_ZED = _pose; // Guardando o possivel offset vindo da propria ZED
     }
@@ -174,16 +177,6 @@ private:
     return ang;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  double wrap180(double ang_atual, double ang_previous){
-    double delta = ang_atual - ang_previous;
-    // Manter o limite entre -180 e 180 graus, e o
-    // sentido de giro e positivo para anti-horario
-    if(delta >  180.0) delta = delta - 360.0;
-    if(delta < -180.0) delta = delta + 360.0;
-
-    return delta;
-  }
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void atualizar_nuvem(){
     // Preenchendo o ponto com dados atuais
     point.x        = pose.e;
@@ -210,6 +203,8 @@ private:
   Pose_atual pose;              // Tudo aqui e considerado para entrar no filtro
   Pose_atual pose_offset_placa; // Pose de offset com os dados iniciais da placa
   Pose_atual pose_offset_ZED;   // Pose de offset com os dados iniciais da ZED
+
+  double decaimento_bussola; // Decaimento natural da bussola para correcao
 
   bool vamos_salvar_nuvem; // Vamos ou nao gravar a nuvem para ver o trajeto depois
   PointCloud<PointXYZRGBNormal>::Ptr nuvem; // Nuvem com o caminho, onde as normais sao os angulos
