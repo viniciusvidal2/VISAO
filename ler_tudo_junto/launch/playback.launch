@@ -1,7 +1,7 @@
 <launch>
 
     <arg name="processar" default="true"/>
-    <arg name="bag" default="viagem_rodando_soodom.bag"/>
+    <arg name="bag" default="tentativa.bag"/>
     <arg name="folder" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
     <arg name="rate" default="0.1"/>
 

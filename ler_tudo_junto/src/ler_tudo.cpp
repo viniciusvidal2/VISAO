@@ -88,7 +88,7 @@ Pose_atual pose_filtro_zed;
 
 Kalman_simples kalman; // Kalman simples que vai agir sobre posicao leste E para teste
 
-int contador = 0, contador2 = 0, amostras = 100; // Conta quantas iteracoes passam que dai salvamos ou nao
+int contador = 0, contador2 = 0, amostras = 500; // Conta quantas iteracoes passam que dai salvamos ou nao
 
 double min_hessian = 11000; // Threshold inicial de achar keypoints
 int min_matches = 10; // Numero minimo de matches entre imagens
@@ -356,6 +356,8 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
     kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, 0.5, pose_leitura_placa.x);
     // Salvar a nuvem apos tantas iteracoes?
     kalman.set_salvar_caminho(true);
+    // Imprimir informacoes do filtro para debug?
+    kalman.set_debug(true);
     // Atualizar contador
     contador++;
     // Ja foi a primeira vez, virar o flag
