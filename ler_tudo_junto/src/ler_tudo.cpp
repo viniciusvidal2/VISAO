@@ -46,6 +46,7 @@
 #include "../../libraries/placa.cpp"
 #include "../../libraries/zed.cpp"
 #include "../../libraries/kalman_simples.cpp"
+#include "../../libraries/kalman_completo.cpp"
 #include "../../libraries/pose.h"
 
 using namespace std;
@@ -85,8 +86,10 @@ Pose_atual pose_leitura_imagem; // Poses referentes a imagem
 Pose_atual pose_filtro_imagem;
 Pose_atual pose_leitura_zed; // Pose de leitura da zed, vamos ver
 Pose_atual pose_filtro_zed;
+Pose_atual saida_filtro; // Saida do filtro de Kalman completo
 
 Kalman_simples kalman; // Kalman simples que vai agir sobre posicao leste E para teste
+Kalman_completo kalman_completo; // Kalman completo para pegar todos os seis graus
 
 int contador = 0, contador2 = 0, amostras = 500; // Conta quantas iteracoes passam que dai salvamos ou nao
 
@@ -352,12 +355,21 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
     zed.set_pose(pose_leitura_zed  , 2); // Salvando na PREVIOUS os offsets de leitura da ZED ao inicio da BAG (forcar o que ja andou ali a 0)
     // Salvar a nuvem apos tantas iteracoes?
     zed.set_salvar_caminho(true);
-    // Iniciar o kalman simples
-    kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, 0.5, pose_leitura_placa.x);
+//    // Iniciar o kalman simples
+//    kalman.init(placa_msg->pose.covariance.at(0), pose_leitura_placa.x, 0.5, pose_leitura_placa.x);
+//    // Salvar a nuvem apos tantas iteracoes?
+//    kalman.set_salvar_caminho(true);
+//    // Imprimir informacoes do filtro para debug?
+//    kalman.set_debug(true);
+
+    // Iniciar filtro de Kalman
+    vector<double> error_est = {0.05, 0.05, 2.0, 1.0, 1.0, 1.0}; // Melhorar
+    kalman_completo.init(pose_leitura_placa, error_est);
     // Salvar a nuvem apos tantas iteracoes?
-    kalman.set_salvar_caminho(true);
+    kalman_completo.set_salvar_caminho(true);
     // Imprimir informacoes do filtro para debug?
-    kalman.set_debug(true);
+    kalman_completo.set_debug(false);
+
     // Atualizar contador
     contador++;
     // Ja foi a primeira vez, virar o flag
@@ -377,7 +389,9 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
       zed.process_and_return(pose_filtro_zed, msg_zed_odo);
 
       ////////////// AQUI ENTRA O FILTRO DE KALMAN //////////////
-      kalman.filter(pose_filtro_zed.dx, pose_filtro_placa.e, msg_placa_odo.pose.covariance.at(0));
+//      kalman.filter(pose_filtro_zed.dx, pose_filtro_placa.e, msg_placa_odo.pose.covariance.at(0));
+      kalman_completo.set_measure_covariance_matrix(msg_placa_odo);
+      kalman_completo.filter(pose_filtro_zed, pose_filtro_placa, saida_filtro);
 
       // Publicar as duas poses para vefiricar no rviz
       msg_zed_odo.header.frame_id = msg_placa_odo.header.frame_id;
@@ -390,13 +404,16 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
       cout << "\nIteracao: " << contador << endl;
 
     } else {
+
       // Salvar se foi setado para tal
       string nome = "zed";
       zed.salvar_nuvem(nome);
       nome = "placa";
       placa.salvar_nuvem(nome);
-      nome = "kalman_simples";
-      kalman.salvar_nuvem(nome);
+//      nome = "kalman_simples";
+//      kalman.salvar_nuvem(nome);
+      nome = "kalman_completo";
+      kalman_completo.salvar_nuvem(nome);
 
       ros::shutdown();
     }

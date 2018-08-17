@@ -73,7 +73,7 @@ public:
     pose.dpitch = wrap180(pose.pitch, pose_previous.pitch);
     pose.dyaw   = wrap180(pose.yaw  , pose_previous.yaw  );
     // Printar estado atual
-    if(true){
+    if(false){
       cout << "\n########### PLACA\n";
       cout << "E: " << pose.e << "\tN: " << pose.n << "\tU: " << pose.u << endl;
     }

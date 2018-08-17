@@ -20,6 +20,7 @@ public:
     R    = error_measurement;
     /// Primeira estimativa com inicio do sensor - offset
     X_kp = estimate;
+    X_k  = estimate;
     Y    = measurement;
 
     // Inicio da nuvem

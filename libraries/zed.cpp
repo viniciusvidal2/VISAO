@@ -84,7 +84,7 @@ public:
   void process_and_return(Pose_atual &_pose, Odometry &msg_odo){
     /// A pose atual ja foi atualizada no script principal, contem o que foi lido nesse instante em:
     /// X, Y, Z, ROLL, PITCH, YAW no frame da ZED
-    if(true){
+    if(false){
       cout << "########### ZED sozinha\n";
       cout << "X: " << pose.x << "\tY: " << pose.y << "\tZ: " << pose.z << endl;
     }
@@ -113,7 +113,7 @@ public:
     pose.dyaw   = bound180(pose.yaw   - pose_previous.yaw  );
 
     // Printar estado atual
-    if(true){
+    if(false){
       cout << "########### ZED\n";
       cout << "E: " << pose.e << "\tN: " << pose.n << "\tU: " << pose.u << endl;
       cout << "########### OFFSET\n";
