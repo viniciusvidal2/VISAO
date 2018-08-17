@@ -38,14 +38,15 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void init(Pose_atual estimate, vector<double> error_est){
     /// Inicio Geral
-    X_kp = Mat(6, 1, CV_64FC1);
-    P_kp = Mat(6, 6, CV_64FC1);
-    X_k  = Mat(6, 1, CV_64FC1);
-    P_k  = Mat(6, 6, CV_64FC1);
-    Y    = Mat(6, 1, CV_64FC1);
-    u    = Mat(6, 1, CV_64FC1);
-    R    = Mat(6, 6, CV_64FC1);
-    KG   = Mat(6, 6, CV_64FC1);
+    X_kp = Mat::zeros(6, 1, CV_64FC1);
+    P_kp = Mat::zeros(6, 6, CV_64FC1);
+    X_k  = Mat::zeros(6, 1, CV_64FC1);
+    P_k  = Mat::zeros(6, 6, CV_64FC1);
+    Y    = Mat::zeros(6, 1, CV_64FC1);
+    Y    = Mat::zeros(6, 1, CV_64FC1);
+    u    = Mat::zeros(6, 1, CV_64FC1);
+    R    = Mat::zeros(6, 6, CV_64FC1);
+    KG   = Mat::zeros(6, 6, CV_64FC1);
 
     /// Inicio do estado do processo e da estimativa na iteracao k
     X_kp.at<double>(0, 0) = estimate.e;
@@ -54,14 +55,14 @@ public:
     X_kp.at<double>(3, 0) = estimate.roll;
     X_kp.at<double>(4, 0) = estimate.pitch;
     X_kp.at<double>(5, 0) = estimate.yaw;
-    X_k = X_kp;
+//    X_k = X_kp;
 
     /// Inicio da matriz de covariancias de estados
     P_kp = Mat::diag(Mat(error_est));
     P_k  = P_kp;
 
 //    cout << "Matriz de estados: \n" << X_kp << "\nCovariancias:\n" << P_k << endl;
-
+//    cout << "KG: \n" << KG << "\nR:\n" << R << endl;
     // Inicio da nuvem com o caminho filtrado
     nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
   }
@@ -69,9 +70,9 @@ public:
   ///////////////////////////////////////////// GETS ///////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void get_estimate(Pose_atual &estimate){
-    estimate.x     = X_k.at<double>(0, 0);
-    estimate.y     = X_k.at<double>(1, 0);
-    estimate.z     = X_k.at<double>(2, 0);
+    estimate.e     = X_k.at<double>(0, 0);
+    estimate.n     = X_k.at<double>(1, 0);
+    estimate.u     = X_k.at<double>(2, 0);
     estimate.roll  = X_k.at<double>(3, 0);
     estimate.pitch = X_k.at<double>(4, 0);
     estimate.yaw   = X_k.at<double>(5, 0);
@@ -93,9 +94,10 @@ public:
     R.at<double>(1, 1) = cov.pose.covariance.at( 7);
     R.at<double>(2, 2) = cov.pose.covariance.at(14);
     // Valores de covariancias para angulos -> sensor muito bom, quase sempre desconsideradas
-    R.at<double>(3, 3) = (cov.pose.covariance.at(21) > 10) ? cov.pose.covariance.at(21) : 0.01;
-    R.at<double>(4, 4) = (cov.pose.covariance.at(28) > 10) ? cov.pose.covariance.at(28) : 0.01;
-    R.at<double>(5, 6) = (cov.pose.covariance.at(35) > 10) ? cov.pose.covariance.at(35) : 0.01;
+    R.at<double>(3, 3) = (cov.pose.covariance.at(21) < 10) ? cov.pose.covariance.at(21) : 0.1;
+    R.at<double>(4, 4) = (cov.pose.covariance.at(28) < 10) ? cov.pose.covariance.at(28) : 0.1;
+    R.at<double>(5, 5) = (cov.pose.covariance.at(35) < 10) ? cov.pose.covariance.at(35) : 0.1;
+//    cout << "Covariancia do GPS R:\n" << R << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////// PRINCIPAL ////////////////////////////////////////////////////
@@ -162,7 +164,7 @@ private:
     u.at<double>(4, 0) = est_up.dpitch;
     u.at<double>(5, 0) = est_up.dyaw;
     // Pega o estimado anteriormente e coloca no estado do processo
-    X_kp   = X_k;
+//    X_kp   = X_k;
     // Adiciona as entradas no estado atual
     X_kp  += u; // Matriz B identidade aqui
 //    cout << "Entrada da ZED \n" << u << "\nProcesso aumentado:\n" << X_kp << endl;
@@ -171,7 +173,7 @@ private:
   void calculate_KG(){
     // Ganho de Kalman voando aqui
     KG  = P_kp*(P_kp + R).inv();
-//    cout << "Ganho de Kalman:\n" << KG << endl;
+    cout << "Ganho de Kalman:\n" << KG << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_estimate(Pose_atual meas){
@@ -194,9 +196,12 @@ private:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void print_debug(){
     cout << "#############################################"    << endl;
-    cout << "ESTADO X: [" << X_k << "]\tMEDIDO: [" << Y << "]" << endl;
-    cout << "Ganho   : [" << KG  << "]"                        << endl;
-    cout << "Cov. do ESTADO: [" << P_k << "]"                  << endl;
+//    cout << "Roll processo: " << P_k.at<double>(3, 3) << "\tRoll sensor: " << R.at<double>(3, 3) << endl;
+//    cout << "Altura processo: " << P_k.at<double>(2, 2) << "\tAltura sensor: " << R.at<double>(2, 2) << endl;
+//    cout << "Matriz P_k:\n" << P_k << endl;
+    cout << "Entrada GPS: " << Y.at<double>(0, 0) <<
+            "\tEstimativa Kalman: " << X_k.at<double>(0, 0) <<
+            "\tEstado mais camera: " << X_kp.at<double>(0, 0)+u.at<double>(0, 0) << endl;
     cout << "#############################################"    << endl;
     cout << endl;
   }

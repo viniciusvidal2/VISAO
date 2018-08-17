@@ -91,7 +91,7 @@ Pose_atual saida_filtro; // Saida do filtro de Kalman completo
 Kalman_simples kalman; // Kalman simples que vai agir sobre posicao leste E para teste
 Kalman_completo kalman_completo; // Kalman completo para pegar todos os seis graus
 
-int contador = 0, contador2 = 0, amostras = 500; // Conta quantas iteracoes passam que dai salvamos ou nao
+int contador = 0, contador2 = 0, amostras = 525; // Conta quantas iteracoes passam que dai salvamos ou nao
 
 double min_hessian = 11000; // Threshold inicial de achar keypoints
 int min_matches = 10; // Numero minimo de matches entre imagens
@@ -363,7 +363,7 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
 //    kalman.set_debug(true);
 
     // Iniciar filtro de Kalman
-    vector<double> error_est = {0.05, 0.05, 2.0, 1.0, 1.0, 1.0}; // Melhorar
+    vector<double> error_est = {0.05, 0.05, 5.0, 1.0, 1.0, 1.0}; // Melhorar
     kalman_completo.init(pose_leitura_placa, error_est);
     // Salvar a nuvem apos tantas iteracoes?
     kalman_completo.set_salvar_caminho(true);
