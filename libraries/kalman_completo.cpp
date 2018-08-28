@@ -38,30 +38,31 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void init(Pose_atual estimate, vector<double> error_est){
     /// Inicio Geral
-    X_kp = Mat::zeros(6, 1, CV_64FC1);
-    P_kp = Mat::zeros(6, 6, CV_64FC1);
+    X_barra = Mat::zeros(6, 1, CV_64FC1);
+    P_barra = Mat::zeros(6, 6, CV_64FC1);
     X_k  = Mat::zeros(6, 1, CV_64FC1);
     P_k  = Mat::zeros(6, 6, CV_64FC1);
     Y    = Mat::zeros(6, 1, CV_64FC1);
-    Y    = Mat::zeros(6, 1, CV_64FC1);
     u    = Mat::zeros(6, 1, CV_64FC1);
     R    = Mat::zeros(6, 6, CV_64FC1);
+    Q    = Mat::zeros(6, 6, CV_64FC1);
     KG   = Mat::zeros(6, 6, CV_64FC1);
+    I    = Mat::eye(6, 6, CV_64FC1); // Identidade que usamos aqui nesse codigo
 
     /// Inicio do estado do processo e da estimativa na iteracao k
-    X_kp.at<double>(0, 0) = estimate.e;
-    X_kp.at<double>(1, 0) = estimate.n;
-    X_kp.at<double>(2, 0) = estimate.u;
-    X_kp.at<double>(3, 0) = estimate.roll;
-    X_kp.at<double>(4, 0) = estimate.pitch;
-    X_kp.at<double>(5, 0) = estimate.yaw;
-//    X_k = X_kp;
+    X_barra.at<double>(0, 0) = estimate.e;
+    X_barra.at<double>(1, 0) = estimate.n;
+    X_barra.at<double>(2, 0) = estimate.u;
+    X_barra.at<double>(3, 0) = estimate.roll;
+    X_barra.at<double>(4, 0) = estimate.pitch;
+    X_barra.at<double>(5, 0) = estimate.yaw;
+//    X_k = X_barra;
 
     /// Inicio da matriz de covariancias de estados
-    P_kp = Mat::diag(Mat(error_est));
-    P_k  = P_kp;
+    P_barra = Mat::diag(Mat(error_est));
+    P_k  = P_barra;
 
-//    cout << "Matriz de estados: \n" << X_kp << "\nCovariancias:\n" << P_k << endl;
+//    cout << "Matriz de estados: \n" << X_barra << "\nCovariancias:\n" << P_k << endl;
 //    cout << "KG: \n" << KG << "\nR:\n" << R << endl;
     // Inicio da nuvem com o caminho filtrado
     nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
@@ -90,14 +91,20 @@ public:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void set_measure_covariance_matrix(Odometry cov){
     // Aqui a covariancia da posicao, passada direto
-    R.at<double>(0, 0) = cov.pose.covariance.at( 0);
-    R.at<double>(1, 1) = cov.pose.covariance.at( 7);
-    R.at<double>(2, 2) = cov.pose.covariance.at(14);
+    Q.at<double>(0, 0) = cov.pose.covariance.at( 0);
+    Q.at<double>(1, 1) = cov.pose.covariance.at( 7);
+    Q.at<double>(2, 2) = cov.pose.covariance.at(14);
     // Valores de covariancias para angulos -> sensor muito bom, quase sempre desconsideradas
-    R.at<double>(3, 3) = (cov.pose.covariance.at(21) < 10) ? cov.pose.covariance.at(21) : 0.1;
-    R.at<double>(4, 4) = (cov.pose.covariance.at(28) < 10) ? cov.pose.covariance.at(28) : 0.1;
-    R.at<double>(5, 5) = (cov.pose.covariance.at(35) < 10) ? cov.pose.covariance.at(35) : 0.1;
-//    cout << "Covariancia do GPS R:\n" << R << endl;
+    Q.at<double>(3, 3) = (cov.pose.covariance.at(21) < 10) ? cov.pose.covariance.at(21) : 1.0;
+    Q.at<double>(4, 4) = (cov.pose.covariance.at(28) < 10) ? cov.pose.covariance.at(28) : 1.0;
+    Q.at<double>(5, 5) = (cov.pose.covariance.at(35) < 10) ? cov.pose.covariance.at(35) : 1.0;
+//    cout << "Covariancia do GPS Q:\n" << Q << endl;
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void set_process_covariance_matrix(vector<double> cov){
+    // Covariancia intrinseca do processo (ZED)
+    R = Mat::diag(Mat(cov));
+    cout << "Covariancia do processo R:\n" << R << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////// PRINCIPAL ////////////////////////////////////////////////////
@@ -153,9 +160,8 @@ private:
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_process_state(Pose_atual est_up){
-    // NOTA: a matriz de covariancia do processo nao e alterada aqui, somente na atulaizacao vinda da
-    // iteracao anterior
-    P_kp   = P_k;
+    // Equacao de Probabilistic Robotics, leva em consideracao a covariancia intrinseca do processo (ZED)
+    P_barra   = P_k + R;
     // Entradas do processo, vindas da ZED
     u.at<double>(0, 0) = est_up.dx;
     u.at<double>(1, 0) = est_up.dy;
@@ -164,15 +170,15 @@ private:
     u.at<double>(4, 0) = est_up.dpitch;
     u.at<double>(5, 0) = est_up.dyaw;
     // Pega o estimado anteriormente e coloca no estado do processo
-//    X_kp   = X_k;
+//    X_barra   = X_k;
     // Adiciona as entradas no estado atual
-    X_kp  += u; // Matriz B identidade aqui
-//    cout << "Entrada da ZED \n" << u << "\nProcesso aumentado:\n" << X_kp << endl;
+    X_barra  = X_k + u; // Matriz B identidade aqui
+//    cout << "Entrada da ZED \n" << u << "\nProcesso aumentado:\n" << X_barra << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void calculate_KG(){
     // Ganho de Kalman voando aqui
-    KG  = P_kp*(P_kp + R).inv();
+    KG  = P_barra*(P_barra + Q).inv();
     cout << "Ganho de Kalman:\n" << KG << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -185,13 +191,13 @@ private:
     Y.at<double>(4, 0) = meas.pitch;
     Y.at<double>(5, 0) = meas.yaw;
     // Nova estimativa / estado do sistema
-    X_k = X_kp + KG*( Y - X_kp );
+    X_k = X_barra + KG*( Y - X_barra );
 //    cout << "Nova estimativa: \n" << X_k << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_estimate_covariance(){
-    P_k = (Mat::eye(Size(6, 6), KG.type()) - KG)*P_kp;
-//    cout << "Matriz de covariancias anterior:\n" << P_kp << endl << "Matriz de covariancias nova: \n" << P_k << endl;
+    P_k = (I - KG)*P_barra;
+    cout << "Matriz de covariancias anterior:\n" << P_barra << endl << "Matriz de covariancias nova: \n" << (I - KG)*P_barra << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void print_debug(){
@@ -201,7 +207,7 @@ private:
 //    cout << "Matriz P_k:\n" << P_k << endl;
     cout << "Entrada GPS: " << Y.at<double>(0, 0) <<
             "\tEstimativa Kalman: " << X_k.at<double>(0, 0) <<
-            "\tEstado mais camera: " << X_kp.at<double>(0, 0)+u.at<double>(0, 0) << endl;
+            "\tEstado mais camera: " << X_barra.at<double>(0, 0)+u.at<double>(0, 0) << endl;
     cout << "#############################################"    << endl;
     cout << endl;
   }
@@ -226,9 +232,9 @@ private:
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  /// Variaveis privadas - Retiradas de ILectureOnline no youtube
+  /// Variaveis privadas - Retiradas de ILectureOnline no youtube e do livro Probabilistic Robotics
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  Mat KG, X_kp, X_k, u, P_kp, P_k, R, Y;
+  Mat KG, X_barra, X_k, u, P_barra, P_k, R, Q, Y, I;
 
   bool vamos_salvar_nuvem;
   bool vamos_debugar;

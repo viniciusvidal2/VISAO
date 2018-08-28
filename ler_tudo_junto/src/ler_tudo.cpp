@@ -364,7 +364,10 @@ void placa_e_zed_cb(const nav_msgs::OdometryConstPtr& placa_msg, const nav_msgs:
 
     // Iniciar filtro de Kalman
     vector<double> error_est = {0.05, 0.05, 5.0, 1.0, 1.0, 1.0}; // Melhorar
+    vector<double> error_process = {0.05, 0.05, 2.0, 5.0, 5.0, 5.0};
     kalman_completo.init(pose_leitura_placa, error_est);
+    // Covariancia do processo - ZED, constante ate o momento
+    kalman_completo.set_process_covariance_matrix(error_process);
     // Salvar a nuvem apos tantas iteracoes?
     kalman_completo.set_salvar_caminho(true);
     // Imprimir informacoes do filtro para debug?

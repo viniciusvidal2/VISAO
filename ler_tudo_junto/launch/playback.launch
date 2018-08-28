@@ -2,7 +2,7 @@
 
     <arg name="bag" default="tentativa.bag"/>
     <arg name="folder" default="/home/$(env USER)/visao_ws/src/VISAO/ler_tudo_junto/bags"/>
-    <arg name="rate" default="0.2"/>
+    <arg name="rate" default="0.4"/>
 
     <!--Repassar as imagens comprimidas no bag-->
     <node pkg="image_transport" type="republish" name="republish_left" output="screen" args="compressed in:=/zed/left/image_rect_color raw out:=/zed/left/image_rect_color"/>
