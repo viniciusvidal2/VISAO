@@ -134,6 +134,7 @@ private:
     point.normal_z = pose.yaw;
     // Adicionando a nuvem
     nuvem->push_back(point);
+    cout << "\n Leste da PLACA: " << point.x << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualizar_nuvem(){

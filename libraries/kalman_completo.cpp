@@ -56,13 +56,13 @@ public:
     X_barra.at<double>(3, 0) = estimate.roll;
     X_barra.at<double>(4, 0) = estimate.pitch;
     X_barra.at<double>(5, 0) = estimate.yaw;
-//    X_k = X_barra;
+    X_k = X_barra;
 
     /// Inicio da matriz de covariancias de estados
     P_barra = Mat::diag(Mat(error_est));
     P_k  = P_barra;
 
-//    cout << "Matriz de estados: \n" << X_barra << "\nCovariancias:\n" << P_k << endl;
+    cout << "Matriz de estados: \n" << X_barra << "\nCovariancias:\n" << P_k << endl;
 //    cout << "KG: \n" << KG << "\nR:\n" << R << endl;
     // Inicio da nuvem com o caminho filtrado
     nuvem = (pcl::PointCloud<PointXYZRGBNormal>::Ptr) new pcl::PointCloud<PointXYZRGBNormal>;
@@ -161,8 +161,10 @@ private:
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_process_state(Pose_atual est_up){
     // Equacao de Probabilistic Robotics, leva em consideracao a covariancia intrinseca do processo (ZED)
-    P_barra   = P_k + R;
+    P_barra.release();
+    P_barra = P_k + R;
     // Entradas do processo, vindas da ZED
+//    u.release();
     u.at<double>(0, 0) = est_up.dx;
     u.at<double>(1, 0) = est_up.dy;
     u.at<double>(2, 0) = est_up.dz;
@@ -170,20 +172,23 @@ private:
     u.at<double>(4, 0) = est_up.dpitch;
     u.at<double>(5, 0) = est_up.dyaw;
     // Pega o estimado anteriormente e coloca no estado do processo
-//    X_barra   = X_k;
+    X_barra = X_k;
     // Adiciona as entradas no estado atual
-    X_barra  = X_k + u; // Matriz B identidade aqui
-//    cout << "Entrada da ZED \n" << u << "\nProcesso aumentado:\n" << X_barra << endl;
+    X_barra.release();
+    X_barra = X_k + u; // Matriz B identidade aqui
+    cout << "Entrada da ZED: " << u.at<double>(0, 0) << "\t\tProcesso aumentado:\t\t" << X_barra.at<double>(0, 0) << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void calculate_KG(){
     // Ganho de Kalman voando aqui
-    KG  = P_barra*(P_barra + Q).inv();
-    cout << "Ganho de Kalman:\n" << KG << endl;
+//    KG.release();
+    KG = P_barra*(P_barra + Q).inv();
+//    cout << "Ganho de Kalman:\n" << KG << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_estimate(Pose_atual meas){
     // Ler entrada do GPS
+//    Y.release();
     Y.at<double>(0, 0) = meas.e;
     Y.at<double>(1, 0) = meas.n;
     Y.at<double>(2, 0) = meas.u;
@@ -191,13 +196,16 @@ private:
     Y.at<double>(4, 0) = meas.pitch;
     Y.at<double>(5, 0) = meas.yaw;
     // Nova estimativa / estado do sistema
+    X_k.release();
     X_k = X_barra + KG*( Y - X_barra );
-//    cout << "Nova estimativa: \n" << X_k << endl;
+    cout << "Estimativa anterior: " << X_barra.at<double>(0, 0) << "\t\tNova estimativa: " << X_k.at<double>(0, 0)
+         << "\t\tGPS: " << Y.at<double>(0, 0) << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void update_estimate_covariance(){
+    P_k.release();
     P_k = (I - KG)*P_barra;
-    cout << "Matriz de covariancias anterior:\n" << P_barra << endl << "Matriz de covariancias nova: \n" << (I - KG)*P_barra << endl;
+//    cout << "Matriz de covariancias anterior:\n" << P_barra << endl << "Matriz de covariancias nova: \n" << P_k << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void print_debug(){
@@ -223,6 +231,7 @@ private:
     point.normal_z = X_k.at<double>(5, 0);
     // Adicionando a nuvem
     nuvem->push_back(point);
+    cout << "\n Leste do KALMAN: " << point.x << "  " << X_k.at<double>(0, 0) << endl;
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////
   void visualizar_nuvem(){
