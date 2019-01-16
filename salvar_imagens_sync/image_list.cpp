@@ -7,6 +7,14 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <string>
 
+
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
+using namespace message_filters;
+typedef sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
+
 int ordem = 0;
 std::string camera = "right";
 std::string nome   = "pitch";
@@ -28,14 +36,38 @@ void leftCallback(const sensor_msgs::ImageConstPtr& msg)
   ordem++;
 }
 
+void cameras_callback(const sensor_msgs::ImageConstPtr& left, const sensor_msgs::ImageConstPtr& right){
+  cv_bridge::CvImagePtr left_cv, right_cv;
+  try
+  {
+    left_cv  = cv_bridge::toCvCopy(left , sensor_msgs::image_encodings::BGR8);
+    right_cv = cv_bridge::toCvCopy(right, sensor_msgs::image_encodings::BGR8);
+  }
+  catch (cv_bridge::Exception& e)
+  {
+    ROS_ERROR("cv_bridge exception: %s", e.what());
+    return;
+  }
+  cv::imwrite("/home/vinicius/stereo/left/" +boost::lexical_cast<std::string>(ordem)+".jpg",  left_cv->image);
+  cv::imwrite("/home/vinicius/stereo/right/"+boost::lexical_cast<std::string>(ordem)+".jpg", right_cv->image);
+  std::cout << "Gravamos as imagens da posicao " << ordem << std::endl;
+  ordem++;
+
+  ros::Rate rate(1);
+  rate.sleep();
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "image_list");
   ros::NodeHandle nh;
   image_transport::ImageTransport it(nh);
 
-  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_rect_color",  1000, leftCallback);
-//  image_transport::Subscriber sub_right = it.subscribe("/stereo/right/image_raw", 1000, rightCallback);
+//  image_transport::Subscriber sub_left  = it.subscribe("/stereo/"+camera+"/image_rect_color",  1000, leftCallback);
+  Subscriber<sensor_msgs::Image> subl(nh, "/stereo/left/image_raw" , 100);
+  Subscriber<sensor_msgs::Image> subr(nh, "/stereo/right/image_raw", 100);
+  Synchronizer<syncPolicy> sync(syncPolicy(100), subl, subr);
+  sync.registerCallback(boost::bind(&cameras_callback, _1, _2));
 
   ros::spin();
 
